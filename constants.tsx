@@ -9,25 +9,54 @@ export const DEFAULT_PROFILE: any = {
   phone: "555-0123",
   linkedin: "linkedin.com/in/johndoe",
   portfolio: "johndoe.dev",
-  resumeJson: {
-    summary: "Senior Software Engineer with 8 years of experience in React and Node.js.",
-    skills: ["React", "TypeScript", "Node.js", "AWS", "Python", "SQL"],
-    experience: [
-      {
-        company: "Tech Giant Corp",
-        role: "Senior Frontend Engineer",
-        duration: "2020 - Present",
-        achievements: ["Led migration to Microfrontends", "Improved CI/CD times by 40%"]
+  resumeTracks: [
+    {
+      id: "frontend-track",
+      name: "Senior Frontend Developer",
+      content: {
+        summary: "Senior Software Engineer with 8 years of experience in React and Node.js.",
+        skills: ["React", "TypeScript", "Node.js", "AWS", "Tailwind"],
+        experience: [
+          {
+            company: "Tech Giant Corp",
+            role: "Senior Frontend Engineer",
+            duration: "2020 - Present",
+            achievements: ["Led migration to Microfrontends", "Improved CI/CD times by 40%"]
+          }
+        ],
+        projects: [
+          {
+            name: "Open Source UI Lib",
+            description: "A headless UI library for React.",
+            technologies: ["React", "Tailwind", "Jest"]
+          }
+        ]
       }
-    ],
-    projects: [
-      {
-        name: "Open Source UI Lib",
-        description: "A headless UI library for React.",
-        technologies: ["React", "Tailwind", "Jest"]
+    },
+    {
+      id: "fullstack-track",
+      name: "Full Stack Engineer",
+      content: {
+        summary: "Versatile Full Stack Engineer focused on scalable architectures and high-performance APIs.",
+        skills: ["Node.js", "PostgreSQL", "React", "Docker", "Python"],
+        experience: [
+          {
+            company: "ScaleUp Systems",
+            role: "Full Stack Engineer",
+            duration: "2018 - 2020",
+            achievements: ["Architected multi-tenant SaaS platform", "Optimized DB queries reducing latency by 60%"]
+          }
+        ],
+        projects: [
+          {
+            name: "DevOps Dashboard",
+            description: "Monitoring tool for distributed systems.",
+            technologies: ["Golang", "InfluxDB", "Grafana"]
+          }
+        ]
       }
-    ]
-  },
+    }
+  ],
   preferences: {
     targetRoles: ["Senior Software Engineer", "Staff Engineer", "Frontend Lead"],
     minSalary: "160k",

@@ -1,4 +1,17 @@
 
+export interface ResumeJson {
+  summary: string;
+  skills: string[];
+  experience: Experience[];
+  projects: Project[];
+}
+
+export interface ResumeTrack {
+  id: string;
+  name: string;
+  content: ResumeJson;
+}
+
 export interface Experience {
   company: string;
   role: string;
@@ -13,12 +26,15 @@ export interface Project {
 }
 
 export interface ResumeMutation {
-  mutatedResume: UserProfile['resumeJson'];
+  mutatedResume: ResumeJson;
   report: {
+    selectedTrackId: string;
+    selectedTrackName: string;
     keywordsInjected: string[];
     mirroredPhrases: { original: string; mirrored: string }[];
     reorderingJustification: string;
     atsScoreEstimate: number;
+    iterationCount: number;
   };
 }
 
@@ -28,12 +44,7 @@ export interface UserProfile {
   phone: string;
   linkedin: string;
   portfolio: string;
-  resumeJson: {
-    summary: string;
-    skills: string[];
-    experience: Experience[];
-    projects: Project[];
-  };
+  resumeTracks: ResumeTrack[];
   preferences: {
     targetRoles: string[];
     minSalary: string;
@@ -155,7 +166,7 @@ export interface ApplicationLog {
   url: string;
   coverLetter?: string;
   coverLetterStyle?: CoverLetterStyle;
-  mutatedResume?: UserProfile['resumeJson'];
+  mutatedResume?: ResumeJson;
   mutationReport?: ResumeMutation['report'];
   error?: string;
 }

@@ -67,7 +67,7 @@ export const createStrategyPlan = async (goal: string, profile: UserProfile): Pr
     model: 'gemini-3-flash-preview',
     contents: `Convert this career goal into an executable Autonomous Strategy Plan.
     Goal: "${goal}"
-    User Profile Summary: ${profile.resumeJson.summary}
+    User Profile Summary: ${profile.resumeTracks?.[0]?.content?.summary || 'No summary'}
     Target Roles: ${profile.preferences.targetRoles.join(', ')}`,
     config: {
       systemInstruction: `You are the Autonomous Strategy Engine. Translate goals into parameters.
@@ -183,23 +183,24 @@ export const mutateResume = async (job: Job, profile: UserProfile): Promise<Resu
     model: 'gemini-3-pro-preview',
     contents: `You are a high-level ATS (Applicant Tracking System) Optimization Agent.
     
-    TASK: Perform a "Deep Mutation" of the candidate's resume to match the Job Description.
+    TASK: Select the best base resume from the user's tracks and perform a "Deep Mutation" to match the Job Description.
     
     JOB DESCRIPTION:
     Title: ${job.title}
     Company: ${job.company}
-    Requirements: ${job.description}
+    Description: ${job.description}
     
-    BASE RESUME:
-    ${JSON.stringify(profile.resumeJson)}
+    GOLDEN BASE RESUMES (TRACKS):
+    ${JSON.stringify(profile.resumeTracks)}
     
-    MUTATION RULES:
-    1. LINGUISTIC MIRRORING: Rewrite experience bullet points to use the EXACT terminology and phrasing style from the job description (e.g., if they say 'cloud-native orchestration' and you have 'AWS deployments', rephrase it to reflect their language without lying).
-    2. KEYWORD INJECTION: Naturally weave in at least 5-10 technical keywords from the Job Description that are currently missing or under-represented.
-    3. SEMANTIC REORDERING: Move the most relevant experiences and projects to the TOP of their respective lists. If a side project is more relevant than a past job, prioritize the project area or highlight it in the summary.
-    4. ATS SCORING: Ensure the final JSON structure is identical to the base but with optimized content.
+    CORE RESPONSIBILITIES:
+    1. ROLE SELECTION: Select the ONE base resume track that best aligns with the JD. Do NOT merge tracks.
+    2. RESUME MUTATION (NOT GENERATION): Preserve the structure, chronology, and factual experience of the selected base.
+    3. LINGUISTIC MIRRORING: Rewrite experience bullet points to mirror JD terminology exactly where factually accurate.
+    4. FACTUAL INTEGRITY: NEVER invent experience, tools, or metrics.
+    5. ATS OPTIMIZATION: Use simple headers and structure. Optimize for parsing.
     
-    OUTPUT: Return a JSON object with the mutated resume AND a report of what was changed.`,
+    OUTPUT: Return JSON with the mutated resume, and a detailed report.`,
     config: {
       responseMimeType: "application/json",
       responseSchema: {
@@ -238,6 +239,8 @@ export const mutateResume = async (job: Job, profile: UserProfile): Promise<Resu
           report: {
             type: Type.OBJECT,
             properties: {
+              selectedTrackId: { type: Type.STRING },
+              selectedTrackName: { type: Type.STRING },
               keywordsInjected: { type: Type.ARRAY, items: { type: Type.STRING } },
               mirroredPhrases: {
                 type: Type.ARRAY,
@@ -250,7 +253,8 @@ export const mutateResume = async (job: Job, profile: UserProfile): Promise<Resu
                 }
               },
               reorderingJustification: { type: Type.STRING },
-              atsScoreEstimate: { type: Type.NUMBER }
+              atsScoreEstimate: { type: Type.NUMBER },
+              iterationCount: { type: Type.NUMBER }
             }
           }
         },
@@ -263,9 +267,11 @@ export const mutateResume = async (job: Job, profile: UserProfile): Promise<Resu
     return JSON.parse(response.text || "{}");
   } catch (e) {
     console.error("Mutation failed", e);
+    // Fallback to first track
+    const fallback = profile.resumeTracks[0]?.content || { summary: "", skills: [], experience: [], projects: [] };
     return {
-      mutatedResume: profile.resumeJson,
-      report: { keywordsInjected: [], mirroredPhrases: [], reorderingJustification: "Fallback used", atsScoreEstimate: 50 }
+      mutatedResume: fallback,
+      report: { selectedTrackId: profile.resumeTracks[0]?.id || "unknown", selectedTrackName: profile.resumeTracks[0]?.name || "First Track", keywordsInjected: [], mirroredPhrases: [], reorderingJustification: "Fallback used", atsScoreEstimate: 50, iterationCount: 0 }
     };
   }
 };
@@ -346,9 +352,9 @@ export const extractJobData = async (input: string): Promise<Job> => {
 export const calculateMatchScore = async (job: Job, profile: UserProfile): Promise<MatchResult> => {
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Compare this job with this user profile.
+    contents: `Compare this job with this user profile's primary resume track.
     Job: ${JSON.stringify(job)}
-    Profile: ${JSON.stringify(profile.resumeJson)}`,
+    Tracks: ${JSON.stringify(profile.resumeTracks)}`,
     config: {
       responseMimeType: "application/json",
       responseSchema: {
