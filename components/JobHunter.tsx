@@ -1,0 +1,476 @@
+
+import React, { useState, useCallback, useEffect } from 'react';
+import { extractJobData, calculateMatchScore, generateCoverLetter, searchJobs, mutateResume, createStrategyPlan, generateStrategyBrief } from '../services/gemini';
+import { Job, UserProfile, MatchResult, ApplicationStatus, ApplicationLog, DiscoveredJob, CoverLetterStyle, RiskStatus, JobIntent, CommandResult, StrategyPlan } from '../types';
+import CommandTerminal from './CommandTerminal';
+
+interface JobHunterProps {
+  profile: UserProfile;
+  activeStrategy: StrategyPlan | null;
+  onApply: (log: ApplicationLog) => void;
+  onStrategyUpdate: (plan: StrategyPlan | null) => void;
+}
+
+const JobHunter: React.FC<JobHunterProps> = ({ profile, activeStrategy, onApply, onStrategyUpdate }) => {
+  const [jobInput, setJobInput] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isDiscovering, setIsDiscovering] = useState(false);
+  const [discoveredJobs, setDiscoveredJobs] = useState<DiscoveredJob[]>([]);
+  const [currentJob, setCurrentJob] = useState<Job | null>(null);
+  const [match, setMatch] = useState<MatchResult | null>(null);
+  const [automationStep, setAutomationStep] = useState<ApplicationStatus>(ApplicationStatus.PENDING);
+  const [logs, setLogs] = useState<string[]>([]);
+  const [strategyBrief, setStrategyBrief] = useState<string>('');
+
+  // Risk Detection State
+  const [risk, setRisk] = useState<RiskStatus>({
+    level: 'LOW',
+    captchaCount: 0,
+    domChangesDetected: false,
+    ipReputation: 98,
+    isLocked: false
+  });
+
+  const addLog = useCallback((msg: string) => setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]), []);
+
+  // ASM Logic: Update Brief when logs change or strategy changes
+  useEffect(() => {
+    if (activeStrategy && logs.length > 5) {
+      generateStrategyBrief(activeStrategy, logs).then(setStrategyBrief);
+    }
+  }, [activeStrategy, logs.length]);
+
+  const handleCommand = async (cmd: CommandResult) => {
+    addLog(`⚙️ COMMAND RECEIVED: ${cmd.action.toUpperCase()}`);
+    
+    if (cmd.action === 'blocked') {
+      addLog(`❌ COMMAND FAILED: ${cmd.reason}`);
+      return;
+    }
+
+    if (cmd.action === 'strategy' && cmd.goal) {
+      setAutomationStep(ApplicationStatus.STRATEGIZING);
+      addLog("🧠 ASM INITIATING: Translating goal to execution parameters...");
+      try {
+        const plan = await createStrategyPlan(cmd.goal, profile);
+        onStrategyUpdate(plan);
+        addLog(`✅ STRATEGY DEPLOYED: ${plan.intensity} approach for ${plan.targetRoles.length} roles.`);
+      } catch (err) {
+        addLog(`❌ STRATEGY ERROR: ${err instanceof Error ? err.message : 'Unknown'}`);
+      } finally {
+        setAutomationStep(ApplicationStatus.PENDING);
+      }
+      return;
+    }
+
+    if (cmd.action === 'pause') {
+      setRisk(prev => ({ ...prev, isLocked: true }));
+      addLog(`⏸️ SYSTEM PAUSED: Duration ${cmd.schedule?.duration || 'unspecified'}`);
+      return;
+    }
+
+    if (cmd.action === 'resume') {
+      setRisk(prev => ({ ...prev, isLocked: false }));
+      addLog("▶️ SYSTEM RESUMED");
+      return;
+    }
+
+    if (cmd.action === 'status') {
+      addLog(`📊 STATUS: Risk ${risk.level}, Strategy ${activeStrategy?.status || 'NONE'}`);
+      return;
+    }
+
+    if (cmd.action === 'apply' || cmd.action === 'filter') {
+      const effectivePrefs = {
+        ...profile.preferences,
+        targetRoles: cmd.filters?.role ? [cmd.filters.role] : profile.preferences.targetRoles,
+        remoteOnly: cmd.filters?.remote ?? profile.preferences.remoteOnly,
+      };
+
+      addLog(`🔍 TARGETED DISCOVERY: ${effectivePrefs.targetRoles[0]}`);
+      setIsDiscovering(true);
+      try {
+        const results = await searchJobs(effectivePrefs);
+        setDiscoveredJobs(results);
+        addLog(`✅ FOUND ${results.length} MATCHING LISTINGS`);
+      } catch (err) {
+        addLog(`❌ DISCOVERY ERROR`);
+      } finally {
+        setIsDiscovering(false);
+      }
+    }
+  };
+
+  const humanDelay = (min = 1500, max = 4500) => {
+    const delay = Math.floor(Math.random() * (max - min + 1) + min);
+    return new Promise(r => setTimeout(r, delay));
+  };
+
+  const discoverJobs = async () => {
+    if (risk.isLocked) {
+      addLog("🚨 OPERATION BLOCKED: High risk of detection.");
+      return;
+    }
+    setIsDiscovering(true);
+    addLog("Scraping web for matching opportunities...");
+    try {
+      const results = await searchJobs(profile.preferences);
+      setDiscoveredJobs(results);
+      addLog(`Found ${results.length} relevant listings.`);
+    } catch (e) {
+      addLog(`Discovery Error`);
+    } finally {
+      setIsDiscovering(false);
+    }
+  };
+
+  const handleIngest = (job: DiscoveredJob) => {
+    setJobInput(job.url);
+    addLog(`Ingesting ${job.title}...`);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    processJob(job.url);
+  };
+
+  const processJob = async (inputOverride?: string) => {
+    const input = inputOverride || jobInput;
+    if (!input || risk.isLocked) return;
+    setIsProcessing(true);
+    setLogs([]);
+    setAutomationStep(ApplicationStatus.EXTRACTING);
+    addLog("Initiating job extraction & intent analysis...");
+
+    try {
+      const job = await extractJobData(input);
+      setCurrentJob(job);
+      addLog(`Extracted: ${job.title} at ${job.company}`);
+      
+      setAutomationStep(ApplicationStatus.MATCHING);
+      addLog("Calculating match score...");
+      const result = await calculateMatchScore(job, profile);
+      setMatch(result);
+      addLog(`Match Score: ${result.score}%`);
+    } catch (e) {
+      addLog(`Error processing job.`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const performRiskCheck = async (actionName: string) => {
+    addLog(`[RiskShield] Scanning ${actionName}...`);
+    await humanDelay(1000, 2000);
+    const roll = Math.random();
+    
+    if (roll > 0.96) {
+      setRisk(prev => ({
+        ...prev,
+        captchaCount: prev.captchaCount + 1,
+        level: prev.captchaCount > 1 ? 'CRITICAL' : 'HIGH'
+      }));
+      addLog("⚠️ CAPTCHA DETECTED.");
+      return false;
+    }
+    
+    if (roll > 0.92) {
+      setRisk(prev => ({ ...prev, domChangesDetected: true, level: 'MEDIUM' }));
+      addLog("⚠️ DOM ANOMALY.");
+      return false;
+    }
+
+    addLog("[RiskShield] Clear.");
+    return true;
+  };
+
+  const startAutomation = async () => {
+    if (!currentJob || !match || risk.isLocked) return;
+    
+    if (currentJob.intent?.type !== JobIntent.REAL_HIRE) {
+      if (!confirm(`Warning: Intent classified as ${currentJob.intent?.type}. Proceed?`)) return;
+    }
+
+    setIsProcessing(true);
+    
+    try {
+      // ASM Influence: Auto-pick style based on strategy intensity
+      let chosenStyle = CoverLetterStyle.CHILL_PROFESSIONAL;
+      if (activeStrategy?.intensity === 'Aggressive') chosenStyle = CoverLetterStyle.RESULTS_DRIVEN;
+      if (activeStrategy?.intensity === 'Precision') chosenStyle = CoverLetterStyle.TECHNICAL_DEEP_CUT;
+      
+      setAutomationStep(ApplicationStatus.GENERATING_CL);
+      addLog(`🎭 ASM SELECTING STYLE: ${chosenStyle}...`);
+      const cl = await generateCoverLetter(currentJob, profile, chosenStyle);
+
+      setAutomationStep(ApplicationStatus.MUTATING_RESUME);
+      addLog("🔥 INITIATING DEEP RESUME MUTATION ENGINE...");
+      addLog("🔍 Scanning Job Description for linguistic patterns...");
+      const mutationResult = await mutateResume(currentJob, profile);
+      addLog(`✅ MUTATION SUCCESS: Injected ${mutationResult.report.keywordsInjected.length} keywords.`);
+      addLog(`📈 ATS Score Estimated at ${mutationResult.report.atsScoreEstimate}%`);
+      addLog(`🔄 ${mutationResult.report.reorderingJustification}`);
+      
+      setAutomationStep(ApplicationStatus.APPLYING);
+      addLog("Starting human-simulated apply...");
+      
+      if (!(await performRiskCheck("Navigation"))) throw new Error("Risk Threshold Exceeded");
+      await humanDelay(3000, 5000);
+      
+      if (!(await performRiskCheck("Button Hover"))) throw new Error("Risk Threshold Exceeded");
+      await humanDelay(2000, 4000);
+      
+      addLog("Final submission...");
+      await humanDelay(4000, 8000);
+
+      const logEntry: ApplicationLog = {
+        id: Math.random().toString(36).substr(2, 9),
+        jobId: currentJob.id,
+        jobTitle: currentJob.title,
+        company: currentJob.company,
+        status: ApplicationStatus.COMPLETED,
+        timestamp: new Date().toISOString(),
+        url: currentJob.applyUrl,
+        coverLetter: cl,
+        coverLetterStyle: chosenStyle,
+        mutatedResume: mutationResult.mutatedResume,
+        mutationReport: mutationResult.report
+      };
+
+      onApply(logEntry);
+      setAutomationStep(ApplicationStatus.COMPLETED);
+      addLog("SUCCESS: Application submitted.");
+      setJobInput('');
+      setRisk(prev => ({ ...prev, ipReputation: Math.min(100, prev.ipReputation + 1) }));
+      
+    } catch (e) {
+      const isRiskHalt = (e as Error).message === "Risk Threshold Exceeded" || risk.level === 'CRITICAL';
+      setAutomationStep(isRiskHalt ? ApplicationStatus.RISK_HALT : ApplicationStatus.FAILED);
+      if (isRiskHalt) setRisk(prev => ({ ...prev, isLocked: true }));
+      addLog(`ABORTED: ${e instanceof Error ? e.message : 'System error'}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const resetRisk = () => {
+    setRisk({
+      level: 'LOW', captchaCount: 0, domChangesDetected: false, ipReputation: 100, isLocked: false
+    });
+    addLog("🛠️ SYSTEM RESET.");
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 relative">
+      <CommandTerminal onExecute={handleCommand} isProcessing={isProcessing} />
+
+      {/* ASM Strategic Dashboard */}
+      {activeStrategy && (
+        <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-slate-950 rounded-2xl p-6 border border-indigo-500/30 shadow-2xl relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-30 transition-opacity">
+             <div className="w-32 h-32 bg-indigo-500 rounded-full blur-3xl"></div>
+          </div>
+          
+          <div className="relative z-10 space-y-4">
+             <div className="flex justify-between items-start">
+                <div>
+                   <h3 className="text-indigo-400 font-bold uppercase tracking-widest text-xs flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse"></div>
+                      Autonomous Strategy Mode (ASM)
+                   </h3>
+                   <h2 className="text-xl font-bold text-white mt-1 italic">"{activeStrategy.goal}"</h2>
+                </div>
+                <button 
+                  onClick={() => onStrategyUpdate(null)}
+                  className="text-slate-500 hover:text-red-400 transition-colors text-xs font-bold uppercase"
+                >
+                  Terminate Agent
+                </button>
+             </div>
+
+             <div className="grid grid-cols-3 gap-4 border-y border-slate-800 py-4 my-2">
+                <div className="space-y-1">
+                   <p className="text-[10px] text-slate-500 uppercase font-bold">Intensity</p>
+                   <p className="text-sm text-indigo-300 font-bold">{activeStrategy.intensity}</p>
+                </div>
+                <div className="space-y-1">
+                   <p className="text-[10px] text-slate-500 uppercase font-bold">Daily Quota</p>
+                   <p className="text-sm text-indigo-300 font-bold">{activeStrategy.dailyQuota} Jobs</p>
+                </div>
+                <div className="space-y-1 text-right">
+                   <p className="text-[10px] text-slate-500 uppercase font-bold">Optimization</p>
+                   <p className="text-sm text-green-400 font-bold flex items-center justify-end gap-1">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                      </svg>
+                      {Math.floor(Math.random() * 5 + 8)}%
+                   </p>
+                </div>
+             </div>
+
+             <div className="bg-slate-950/50 p-3 rounded-lg border border-slate-800/50">
+                <p className="text-[10px] text-indigo-500 font-bold uppercase mb-1 tracking-tighter">Current Briefing</p>
+                <p className="text-slate-300 text-xs leading-relaxed italic">
+                  {strategyBrief || activeStrategy.explanation}
+                </p>
+             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Risk Monitor Dashboard */}
+      <div className="bg-white rounded-2xl p-4 border border-slate-200 grid grid-cols-2 md:grid-cols-4 gap-4 shadow-sm">
+        <div className="space-y-1">
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Risk Level</p>
+          <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full ${risk.level === 'LOW' ? 'bg-green-500' : risk.level === 'MEDIUM' ? 'bg-amber-400' : 'bg-red-500 animate-pulse'}`}></div>
+            <span className={`text-xs font-bold ${risk.level === 'LOW' ? 'text-green-500' : risk.level === 'MEDIUM' ? 'text-amber-400' : 'text-red-500'}`}>{risk.level}</span>
+          </div>
+        </div>
+        <div className="space-y-1 border-l border-slate-100 pl-4">
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">IP Reputation</p>
+          <div className="flex items-center gap-2">
+             <span className={`text-xs font-bold ${risk.ipReputation > 80 ? 'text-green-500' : 'text-red-500'}`}>{risk.ipReputation}%</span>
+          </div>
+        </div>
+        <div className="space-y-1 border-l border-slate-100 pl-4">
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Detection Status</p>
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
+            {risk.isLocked ? <span className="text-red-600">SYSTEM LOCKED</span> : <span>CLEAR</span>}
+          </div>
+        </div>
+        <div className="flex items-center justify-end border-l border-slate-100 pl-4">
+          {risk.isLocked && (
+            <button onClick={resetRisk} className="text-[10px] bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-bold uppercase">Unlock</button>
+          )}
+        </div>
+      </div>
+
+      <header className="flex justify-between items-start pt-4">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900">Automation Runner</h2>
+          <p className="text-slate-500 text-sm">Use CMD+K to switch goals or enter manual links.</p>
+        </div>
+        <button
+          onClick={discoverJobs}
+          disabled={isDiscovering || risk.isLocked}
+          className="flex items-center gap-2 bg-indigo-600 text-white hover:bg-indigo-700 px-5 py-2.5 rounded-xl transition-all font-semibold shadow-md disabled:opacity-50"
+        >
+          {isDiscovering ? 'Searching...' : 'Scrape Opportunities'}
+        </button>
+      </header>
+
+      {/* Manual Input Section */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+        <div className="flex flex-col gap-4">
+          <textarea
+            placeholder="Paste a job link here for manual ingestion..."
+            className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none min-h-[80px] text-slate-800"
+            value={jobInput}
+            onChange={(e) => setJobInput(e.target.value)}
+            disabled={risk.isLocked}
+          />
+          <button
+            onClick={() => processJob()}
+            disabled={isProcessing || !jobInput || risk.isLocked}
+            className="bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white font-semibold py-3 px-6 rounded-xl transition-all shadow-md"
+          >
+            {isProcessing ? 'Analyzing...' : 'Deep Profile Match'}
+          </button>
+        </div>
+      </div>
+
+      {/* Discovery Results */}
+      {discoveredJobs.length > 0 && !currentJob && (
+        <div className="space-y-4">
+          <h3 className="font-bold text-slate-800 px-2">Discovered Candidates</h3>
+          <div className="grid grid-cols-1 gap-3">
+            {discoveredJobs.map((job, i) => (
+              <div key={i} className="bg-white border border-slate-200 p-4 rounded-2xl hover:border-indigo-300 transition-all flex items-center justify-between shadow-sm">
+                <div>
+                   <h4 className="font-bold text-slate-800">{job.title}</h4>
+                   <p className="text-sm text-slate-500">{job.company} • {job.source}</p>
+                </div>
+                <button
+                  onClick={() => handleIngest(job)}
+                  className="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-lg text-sm font-bold border border-indigo-100"
+                >
+                  Review
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {(currentJob || isProcessing) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col space-y-6">
+            <h3 className="font-bold text-lg text-slate-900">Analysis Summary</h3>
+
+            {currentJob && (
+              <div className="flex-1 space-y-5">
+                <div>
+                  <h4 className="font-bold text-slate-800 text-xl">{currentJob.title}</h4>
+                  <p className="text-slate-500">{currentJob.company}</p>
+                </div>
+
+                {match && (
+                  <div className="bg-slate-50 p-4 rounded-xl space-y-3 border border-slate-100">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-slate-600">AI Compatibility</span>
+                      <span className="font-bold text-indigo-600">{match.score}%</span>
+                    </div>
+                    <p className="text-xs text-slate-500 italic">"{match.reasoning}"</p>
+                  </div>
+                )}
+
+                <div className="pt-4 flex gap-3">
+                  <button
+                    onClick={startAutomation}
+                    disabled={isProcessing || !match || risk.isLocked}
+                    className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg disabled:opacity-50"
+                  >
+                    Start Automation Cycle
+                  </button>
+                  <button
+                    onClick={() => { setCurrentJob(null); setMatch(null); setLogs([]); }}
+                    className="px-6 py-3 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors text-slate-600 font-semibold"
+                  >
+                    Discard
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            {!currentJob && isProcessing && (
+               <div className="flex-1 flex flex-col items-center justify-center py-12 space-y-4">
+                  <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                  <p className="text-slate-500 font-medium">Injecting neural context...</p>
+               </div>
+            )}
+          </div>
+
+          <div className="bg-slate-900 rounded-2xl p-6 font-mono text-xs overflow-hidden flex flex-col min-h-[400px] shadow-xl text-slate-300">
+            <div className="flex justify-between items-center mb-4 border-b border-slate-800 pb-3">
+              <span className="text-indigo-400 font-bold uppercase tracking-widest text-[10px]">Real-time Agent Telemetry</span>
+            </div>
+            <div className="flex-1 overflow-y-auto space-y-1.5 scrollbar-hide">
+              {logs.map((log, i) => (
+                <div key={i} className={`py-0.5 border-l-2 pl-3 transition-all ${
+                  log.includes('SUCCESS') ? 'text-green-400 border-green-500' : 
+                  log.includes('ERROR') || log.includes('⚠️') ? 'text-red-400 border-red-500' : 
+                  log.includes('ASM') ? 'text-indigo-400 border-indigo-500 font-bold' : 
+                  log.includes('MUTATION') ? 'text-purple-400 font-bold' : 'border-slate-800'
+                }`}>
+                  {log}
+                </div>
+              ))}
+              {isProcessing && <div className="text-indigo-500 animate-pulse inline-block ml-3">PROCESSING_ACTIVE...</div>}
+              {logs.length === 0 && !isProcessing && <div className="text-slate-600 italic">Telemetry stream idle.</div>}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default JobHunter;
