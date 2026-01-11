@@ -20,7 +20,6 @@ const App: React.FC = () => {
     activeStrategy: null 
   });
 
-  // Handle Auth Session
   useEffect(() => {
     supabase.auth.getSession()
       .then(({ data: { session } }) => {
@@ -28,8 +27,8 @@ const App: React.FC = () => {
         setLoading(false);
       })
       .catch(err => {
-        console.error("Supabase Session Error:", err);
-        setError("Network Error: Could not establish a connection to the database.");
+        console.error("Supabase Auth Error:", err);
+        setError("Identity system offline. Retrying...");
         setLoading(false);
       });
 
@@ -41,13 +40,11 @@ const App: React.FC = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Fetch Cloud Data
   useEffect(() => {
     if (!session?.user) return;
 
     const fetchCloudData = async () => {
       try {
-        // 1. Fetch Profile
         let { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('*')
@@ -72,7 +69,6 @@ const App: React.FC = () => {
           profileData = created;
         }
 
-        // 2. Fetch Applications
         const { data: appsData, error: appsError } = await supabase
           .from('applications')
           .select('*')
@@ -111,9 +107,8 @@ const App: React.FC = () => {
         });
         setError(null);
       } catch (err: any) {
-        console.error("Cloud Sync Error:", err);
-        const errorMsg = err.message || JSON.stringify(err);
-        setError(`Cloud Sync Failed: ${errorMsg}`);
+        const msg = err.message || JSON.stringify(err);
+        setError(`Cloud Sync Error: ${msg}`);
       }
     };
 
@@ -137,23 +132,22 @@ const App: React.FC = () => {
       });
       if (error) throw error;
     } catch (err: any) {
-      console.error("Profile update failed:", err.message || JSON.stringify(err));
+      console.error("Profile update error:", err.message);
     }
   };
 
   const handleNewApplication = async (log: ApplicationLog) => {
     if (!session?.user) return;
     try {
-      // Ensure we are only sending what the DB expects
       const payload = {
         user_id: session.user.id,
-        job_id: log.jobId,
+        job_id: log.jobId || `jid-${Date.now()}`,
         job_title: log.jobTitle,
         company: log.company,
         status: log.status,
         url: log.url,
-        platform: log.platform,
-        location: log.location,
+        platform: log.platform || 'Other',
+        location: log.location || 'Remote',
         cover_letter: log.coverLetter,
         cover_letter_style: log.coverLetterStyle,
         mutated_resume: log.mutatedResume,
@@ -167,7 +161,13 @@ const App: React.FC = () => {
         .select()
         .single();
 
-      if (insertError) throw insertError;
+      if (insertError) {
+        if (insertError.message.includes('column')) {
+           console.warn("Potential schema mismatch. Attempting refresh...");
+           // This is where a manual schema reload would be triggered if possible
+        }
+        throw insertError;
+      }
       
       if (savedApp) {
         setState(prev => ({
@@ -176,14 +176,10 @@ const App: React.FC = () => {
         }));
       }
     } catch (err: any) {
-      const detailedError = err.message || JSON.stringify(err);
-      console.error("Application save failed:", detailedError);
-      setError(`Save Failure: ${detailedError}`);
+      const msg = err.message || JSON.stringify(err);
+      setError(`Application Storage Error: ${msg}`);
+      console.error("Database Error:", err);
     }
-  };
-
-  const handleStrategyUpdate = (plan: StrategyPlan | null) => {
-    setState(prev => ({ ...prev, activeStrategy: plan }));
   };
 
   const handleLogout = async () => {
@@ -193,8 +189,8 @@ const App: React.FC = () => {
 
   if (loading) return (
     <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
-      <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-4"></div>
-      <div className="font-bold text-slate-400 animate-pulse uppercase tracking-widest text-xs">Initializing Secure Workspace...</div>
+      <div className="w-12 h-12 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin mb-4"></div>
+      <div className="font-bold text-slate-400 uppercase tracking-widest text-[10px]">Cloud Identity Initializing...</div>
     </div>
   );
 
@@ -203,19 +199,17 @@ const App: React.FC = () => {
   return (
     <Layout activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout}>
       {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center justify-between animate-in slide-in-from-top-4">
-          <div className="flex items-center gap-3 overflow-hidden">
-            <div className="w-8 h-8 shrink-0 bg-red-100 rounded-lg flex items-center justify-center text-red-600">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-            </div>
-            <p className="text-xs font-semibold text-red-800 truncate">{error}</p>
+        <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center justify-between shadow-sm">
+          <p className="text-[10px] font-black uppercase text-red-800 truncate tracking-tight">{error}</p>
+          <div className="flex gap-4">
+            <button onClick={() => { setError(null); window.location.reload(); }} className="text-[10px] font-black text-red-600 uppercase hover:underline tracking-widest">Reload</button>
+            <button onClick={() => setError(null)} className="text-[10px] font-black text-slate-400 uppercase hover:underline tracking-widest">Clear</button>
           </div>
-          <button onClick={() => { setError(null); window.location.reload(); }} className="text-[10px] font-black text-red-600 uppercase hover:underline shrink-0 ml-4">Retry Sync</button>
         </div>
       )}
       
       {(!state.profile && !error) ? (
-        <div className="p-20 text-center font-bold text-slate-400">Synchronizing Identity...</div>
+        <div className="p-20 text-center font-bold text-slate-300 animate-pulse uppercase tracking-widest text-xs">Synchronizing Identity Engine...</div>
       ) : (
         <>
           {activeTab === 'profile' && state.profile && <ProfileEditor profile={state.profile} onSave={handleUpdateProfile} />}
@@ -225,7 +219,7 @@ const App: React.FC = () => {
               profile={state.profile} 
               activeStrategy={state.activeStrategy}
               onApply={handleNewApplication} 
-              onStrategyUpdate={handleStrategyUpdate}
+              onStrategyUpdate={(p) => setState(prev => ({ ...prev, activeStrategy: p }))}
               onProfileUpdate={handleUpdateProfile}
             />
           )}

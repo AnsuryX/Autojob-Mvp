@@ -28,13 +28,17 @@ export interface Project {
 export interface ResumeMutation {
   mutatedResume: ResumeJson;
   report: {
-    selectedTrackId: string;
-    selectedTrackName: string;
+    selectedTrackId?: string;
+    selectedTrackName?: string;
     keywordsInjected: string[];
-    mirroredPhrases: { original: string; mirrored: string }[];
-    reorderingJustification: string;
+    mirroredPhrases?: { original: string; mirrored: string }[];
+    reorderingJustification?: string;
     atsScoreEstimate: number;
-    iterationCount: number;
+    iterationCount?: number;
+    timings?: {
+      mutationMs: number;
+      analysisMs: number;
+    };
   };
 }
 
@@ -163,6 +167,12 @@ export interface VerificationProof {
   networkLogs: string[];
   virtualScreenshot?: string; // Base64 of a visual "receipt"
   serverStatusCode: number;
+  timings?: {
+    dnsMs: number;
+    tlsMs: number;
+    requestMs: number;
+  };
+  fieldValidation?: Record<string, 'VALID' | 'INVALID'>;
 }
 
 export interface ApplicationLog {
