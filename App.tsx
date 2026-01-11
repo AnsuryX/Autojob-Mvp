@@ -104,14 +104,16 @@ const App: React.FC = () => {
             coverLetter: app.cover_letter,
             coverLetterStyle: app.cover_letter_style,
             mutatedResume: app.mutated_resume,
-            mutationReport: app.mutation_report
+            mutationReport: app.mutation_report,
+            verification: app.verification
           })),
           activeStrategy: null
         });
         setError(null);
       } catch (err: any) {
         console.error("Cloud Sync Error:", err);
-        setError(`Cloud Sync Failed: ${err.message || 'Check your internet connection.'}`);
+        const errorMsg = err.message || JSON.stringify(err);
+        setError(`Cloud Sync Failed: ${errorMsg}`);
       }
     };
 
@@ -134,15 +136,16 @@ const App: React.FC = () => {
         updated_at: new Date().toISOString()
       });
       if (error) throw error;
-    } catch (err) {
-      console.error("Profile update failed:", err);
+    } catch (err: any) {
+      console.error("Profile update failed:", err.message || JSON.stringify(err));
     }
   };
 
   const handleNewApplication = async (log: ApplicationLog) => {
     if (!session?.user) return;
     try {
-      const { data: savedApp, error } = await supabase.from('applications').insert({
+      // Ensure we are only sending what the DB expects
+      const payload = {
         user_id: session.user.id,
         job_id: log.jobId,
         job_title: log.jobTitle,
@@ -154,18 +157,28 @@ const App: React.FC = () => {
         cover_letter: log.coverLetter,
         cover_letter_style: log.coverLetterStyle,
         mutated_resume: log.mutatedResume,
-        mutation_report: log.mutationReport
-      }).select().single();
+        mutation_report: log.mutationReport,
+        verification: log.verification || null
+      };
 
-      if (error) throw error;
+      const { data: savedApp, error: insertError } = await supabase
+        .from('applications')
+        .insert(payload)
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+      
       if (savedApp) {
         setState(prev => ({
           ...prev,
-          applications: [...prev.applications, { ...log, id: savedApp.id }]
+          applications: [ { ...log, id: savedApp.id }, ...prev.applications ]
         }));
       }
-    } catch (err) {
-      console.error("Application save failed:", err);
+    } catch (err: any) {
+      const detailedError = err.message || JSON.stringify(err);
+      console.error("Application save failed:", detailedError);
+      setError(`Save Failure: ${detailedError}`);
     }
   };
 
@@ -191,13 +204,13 @@ const App: React.FC = () => {
     <Layout activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout}>
       {error && (
         <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center justify-between animate-in slide-in-from-top-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center text-red-600">
+          <div className="flex items-center gap-3 overflow-hidden">
+            <div className="w-8 h-8 shrink-0 bg-red-100 rounded-lg flex items-center justify-center text-red-600">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
             </div>
-            <p className="text-sm font-semibold text-red-800">{error}</p>
+            <p className="text-xs font-semibold text-red-800 truncate">{error}</p>
           </div>
-          <button onClick={() => window.location.reload()} className="text-xs font-bold text-red-600 uppercase hover:underline">Retry</button>
+          <button onClick={() => { setError(null); window.location.reload(); }} className="text-[10px] font-black text-red-600 uppercase hover:underline shrink-0 ml-4">Retry Sync</button>
         </div>
       )}
       
