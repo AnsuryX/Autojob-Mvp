@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { Job, UserProfile, CareerRoadmap, MarketInsights, DiscoveredJob, ResumeJson, Gig, CommandResult } from "../types.ts";
 
@@ -117,7 +116,6 @@ export async function decodeAudioData(
   return buffer;
 }
 
-// ... rest of the existing exports ...
 export const alignResumeWithProfile = async (track: ResumeJson, profile: UserProfile): Promise<ResumeJson> => {
   const ai = getAi();
   const response = await ai.models.generateContent({
@@ -598,7 +596,8 @@ export const parseResume = async (base64: string, mimeType: string): Promise<any
   const ai = getAi();
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: [{ inlineData: { data: base64, mimeType } }, { text: "Extract Name, Email, Phone, and structured Resume JSON." }],
+    // Fix: Using parts array within contents for multi-modal input according to guidelines.
+    contents: { parts: [{ inlineData: { data: base64, mimeType } }, { text: "Extract Name, Email, Phone, and structured Resume JSON." }] },
     config: { responseMimeType: "application/json" }
   });
   return JSON.parse(response.text || "{}");

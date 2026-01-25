@@ -1,44 +1,55 @@
 
-import React, { useState, useEffect } from 'react';
-import { generateCareerRoadmap } from '../services/gemini';
-import { UserProfile, CareerRoadmap } from '../types';
+import React from 'react';
+import { UserProfile, CareerRoadmap, TaskState } from '../types';
 
 interface RoadmapAgentProps {
   profile: UserProfile;
+  roadmap: CareerRoadmap | null;
+  task: TaskState;
+  onTrigger: () => void;
 }
 
-const RoadmapAgent: React.FC<RoadmapAgentProps> = ({ profile }) => {
-  const [roadmap, setRoadmap] = useState<CareerRoadmap | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-
-  const fetchRoadmap = async () => {
-    setIsLoading(true);
-    try {
-      const data = await generateCareerRoadmap(profile);
-      setRoadmap(data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+const RoadmapAgent: React.FC<RoadmapAgentProps> = ({ roadmap, task, onTrigger }) => {
+  const isRunning = task.status === 'running';
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-20">
-      <div className="bg-white rounded-[2.5rem] p-10 border border-slate-200 shadow-sm space-y-8">
+      <div className="bg-white rounded-[2.5rem] p-10 border border-slate-200 shadow-sm space-y-8 overflow-hidden relative">
+        {/* Persistent Neural Progress Bar */}
+        {isRunning && (
+          <div className="absolute top-0 left-0 right-0 h-1.5 bg-slate-100 overflow-hidden">
+            <div 
+              className="h-full bg-indigo-600 transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(79,70,229,0.5)]"
+              style={{ width: `${task.progress}%` }}
+            ></div>
+          </div>
+        )}
+
         <div className="flex justify-between items-start">
           <div className="space-y-2">
             <h2 className="text-2xl font-black text-slate-900 tracking-tight">Strategic Career Navigator</h2>
             <p className="text-slate-500 text-sm">Long-term gap analysis and market-driven evolution strategy.</p>
           </div>
           <button 
-            onClick={fetchRoadmap}
-            disabled={isLoading}
-            className="bg-slate-900 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl hover:bg-black transition-all active:scale-95 disabled:opacity-50"
+            onClick={onTrigger}
+            disabled={isRunning}
+            className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2 ${isRunning ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-900 text-white hover:bg-black'}`}
           >
-            {isLoading ? 'Scanning Market...' : 'Generate Evolution Plan'}
+            {isRunning ? (
+              <>
+                <div className="w-3 h-3 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                Agent Working...
+              </>
+            ) : 'Generate Evolution Plan'}
           </button>
         </div>
+
+        {isRunning && (
+          <div className="bg-indigo-50/50 p-6 rounded-3xl border border-indigo-100/50 animate-pulse text-center">
+            <p className="text-indigo-600 font-black text-xs uppercase tracking-widest">{task.message}</p>
+            <p className="text-[10px] text-indigo-400 font-bold mt-1">This operation will continue in the background if you switch tabs.</p>
+          </div>
+        )}
 
         {roadmap ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -83,7 +94,7 @@ const RoadmapAgent: React.FC<RoadmapAgentProps> = ({ profile }) => {
               </div>
             </div>
           </div>
-        ) : (
+        ) : !isRunning && (
           <div className="py-24 text-center border-4 border-dashed border-slate-50 rounded-[3rem]">
             <p className="text-[10px] font-black text-slate-200 uppercase tracking-widest">Awaiting Strategic Dispatch</p>
           </div>

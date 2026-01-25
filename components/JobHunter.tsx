@@ -1,7 +1,7 @@
 
 import React, { useState, useCallback } from 'react';
 import { extractJobData, calculateMatchScore, generateCoverLetter, searchJobsPro, mutateResume, getMarketInsights } from '../services/gemini.ts';
-import { Job, UserProfile, ApplicationStatus, ApplicationLog, DiscoveredJob, CoverLetterStyle, VerificationProof, MarketInsights } from '../types.ts';
+import { Job, UserProfile, ApplicationStatus, ApplicationLog, DiscoveredJob, CoverLetterStyle, VerificationProof, MarketInsights, TaskState } from '../types.ts';
 import { Icons } from '../constants.tsx';
 
 interface JobHunterProps {
@@ -13,9 +13,10 @@ interface JobHunterProps {
   onStrategyUpdate: (plan: any) => void;
   onProfileUpdate: (profile: UserProfile) => void;
   onTabSwitch?: (tab: string) => void;
+  task: TaskState;
 }
 
-const JobHunter: React.FC<JobHunterProps> = ({ profile, discoveredJobs, onDiscoveredJobsUpdate, onApply, onTabSwitch }) => {
+const JobHunter: React.FC<JobHunterProps> = ({ profile, discoveredJobs, onDiscoveredJobsUpdate, onApply, onTabSwitch, task }) => {
   const [jobInput, setJobInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentJob, setCurrentJob] = useState<Job | null>(null);
@@ -27,9 +28,11 @@ const JobHunter: React.FC<JobHunterProps> = ({ profile, discoveredJobs, onDiscov
 
   const addLog = useCallback((msg: string) => setLogs(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev]), []);
 
+  const isSearching = task.status === 'running';
+
   const processInput = async (inputOverride?: string) => {
     const target = inputOverride || jobInput;
-    if (!target.trim()) return;
+    if (!target.trim() || isSearching) return;
     
     const isUrl = target.toLowerCase().startsWith('http');
     setIsProcessing(true);
@@ -52,6 +55,7 @@ const JobHunter: React.FC<JobHunterProps> = ({ profile, discoveredJobs, onDiscov
         setMarketInsights(insights);
       } else {
         setAutomationStep(ApplicationStatus.STRATEGIZING);
+        // Discovery is now partially handled by Global Task in App but can be triggered here too
         const [results, insights] = await Promise.all([
           searchJobsPro(target),
           getMarketInsights(target)
@@ -102,10 +106,22 @@ const JobHunter: React.FC<JobHunterProps> = ({ profile, discoveredJobs, onDiscov
 
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-sm space-y-4">
-        <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-          <Icons.Briefcase /> Lead Discovery Hub
-        </h2>
+      <div className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-sm space-y-4 relative overflow-hidden">
+        {isSearching && (
+          <div className="absolute top-0 left-0 right-0 h-1 bg-indigo-600 animate-[loading_2s_ease-in-out_infinite] shadow-[0_0_10px_rgba(79,70,229,0.5)]"></div>
+        )}
+        
+        <div className="flex justify-between items-center">
+          <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+            <Icons.Briefcase /> Lead Discovery Hub
+          </h2>
+          {isSearching && (
+            <span className="text-[9px] font-black text-indigo-600 uppercase tracking-widest animate-pulse">
+              Background Scan Active: {task.message}
+            </span>
+          )}
+        </div>
+        
         <div className="relative">
           <input
             type="text"
@@ -117,10 +133,10 @@ const JobHunter: React.FC<JobHunterProps> = ({ profile, discoveredJobs, onDiscov
           />
           <button
             onClick={() => processInput()}
-            disabled={isProcessing || !jobInput}
+            disabled={isProcessing || isSearching || !jobInput}
             className="absolute right-2 top-2 bottom-2 bg-slate-900 hover:bg-black text-white px-6 rounded-xl text-[10px] font-black uppercase tracking-widest disabled:opacity-50 transition-all"
           >
-            {isProcessing ? 'Processing...' : 'Neural Search'}
+            {isProcessing || isSearching ? 'Processing...' : 'Neural Search'}
           </button>
         </div>
       </div>
@@ -151,12 +167,17 @@ const JobHunter: React.FC<JobHunterProps> = ({ profile, discoveredJobs, onDiscov
               </div>
             </div>
           ))}
+          {(!discoveredJobs || discoveredJobs.length === 0) && !isProcessing && !isSearching && (
+            <div className="py-20 text-center border-4 border-dashed border-slate-100 rounded-[3rem] text-slate-300">
+               <p className="font-black uppercase tracking-widest text-xs">Discovery results will persist here.</p>
+            </div>
+          )}
         </div>
 
         {/* Selected Content / Insights */}
         <div className={`${currentJob ? 'lg:col-span-8' : 'lg:col-span-4'} space-y-6`}>
           {marketInsights && (
-            <div className="bg-indigo-900 rounded-[2rem] p-8 text-white shadow-2xl space-y-6">
+            <div className="bg-indigo-900 rounded-[2rem] p-8 text-white shadow-2xl space-y-6 animate-in fade-in zoom-in-95">
               <div className="flex justify-between items-center">
                 <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-300">Neural Market Context</h3>
                 <span className="text-[10px] bg-indigo-500/30 px-3 py-1 rounded-full border border-indigo-400/20">Grounding Active</span>
@@ -214,10 +235,17 @@ const JobHunter: React.FC<JobHunterProps> = ({ profile, discoveredJobs, onDiscov
                )}
 
                <div className="grid grid-cols-2 gap-3">
-                 <button onClick={startTailoring} className="bg-indigo-600 text-white p-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all">
-                    Generate Dispatch Kit
+                 <button 
+                  onClick={startTailoring} 
+                  disabled={isProcessing}
+                  className="bg-indigo-600 text-white p-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all disabled:opacity-50"
+                 >
+                    {isProcessing ? 'Synthesizing...' : 'Generate Dispatch Kit'}
                  </button>
-                 <button onClick={() => onTabSwitch?.('interview')} className="bg-slate-900 text-white p-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all">
+                 <button 
+                  onClick={() => onTabSwitch?.('interview')} 
+                  className="bg-slate-900 text-white p-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all"
+                 >
                     Start Interview Chamber
                  </button>
                </div>

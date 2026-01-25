@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { GoogleGenAI, Modality } from '@google/genai';
 import { UserProfile } from '../types';
@@ -21,7 +20,8 @@ const InterviewSimulator: React.FC<InterviewSimulatorProps> = ({ profile }) => {
 
   const startSession = async () => {
     setStatus('Connecting');
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+    // Fix: Strictly use process.env.API_KEY for initialization as per guidelines.
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     inputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
     outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
@@ -44,9 +44,13 @@ const InterviewSimulator: React.FC<InterviewSimulatorProps> = ({ profile }) => {
             for (let i = 0; i < l; i++) {
               int16[i] = inputData[i] * 32768;
             }
-            const base64 = encodeAudio(new Uint8Array(int16.buffer));
+            const pcmBlob = {
+              data: encodeAudio(new Uint8Array(int16.buffer)),
+              mimeType: 'audio/pcm;rate=16000',
+            };
+            // Use sessionPromise to prevent race conditions as per guidelines.
             sessionPromise.then(session => {
-              session.sendRealtimeInput({ media: { data: base64, mimeType: 'audio/pcm;rate=16000' } });
+              session.sendRealtimeInput({ media: pcmBlob });
             });
           };
 
@@ -60,12 +64,13 @@ const InterviewSimulator: React.FC<InterviewSimulatorProps> = ({ profile }) => {
           
           const audioData = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
           if (audioData) {
-            const bytes = decodeAudio(audioData);
             nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outputAudioContextRef.current!.currentTime);
-            const buffer = await decodeAudioData(bytes, outputAudioContextRef.current!, 24000, 1);
+            const buffer = await decodeAudioData(decodeAudio(audioData), outputAudioContextRef.current!, 24000, 1);
             const source = outputAudioContextRef.current!.createBufferSource();
             source.buffer = buffer;
             source.connect(outputAudioContextRef.current!.destination);
+            
+            // Gapless playback scheduling as per guidelines.
             source.start(nextStartTimeRef.current);
             nextStartTimeRef.current += buffer.duration;
             sourcesRef.current.add(source);

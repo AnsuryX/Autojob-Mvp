@@ -7,9 +7,10 @@ interface LayoutProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   onLogout?: () => void;
+  isProcessing?: boolean;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, onLogout }) => {
+const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, onLogout, isProcessing }) => {
   const tabs = [
     { id: 'discover', label: 'Job Hunter', icon: <Icons.Briefcase /> },
     { id: 'resume_lab', label: 'Resume Lab', icon: (
@@ -52,16 +53,18 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, onLo
         ))}
 
         <div className="mt-auto space-y-4">
-          <div className="p-4 bg-slate-900 rounded-2xl border border-slate-800 shadow-xl overflow-hidden relative">
+          <div className={`p-4 rounded-2xl border shadow-xl overflow-hidden relative transition-all duration-500 ${isProcessing ? 'bg-indigo-900 border-indigo-500' : 'bg-slate-900 border-slate-800'}`}>
             <div className="absolute top-0 right-0 w-16 h-16 bg-indigo-500/10 rounded-full -mr-8 -mt-8 blur-2xl"></div>
             <div className="flex justify-between items-center mb-2">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ASM Status</p>
-              <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
+              <div className={`w-1.5 h-1.5 rounded-full ${isProcessing ? 'bg-indigo-400 animate-ping' : 'bg-green-500'}`}></div>
             </div>
             <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
-              <div className="h-full bg-indigo-500 w-2/5 shadow-[0_0_8px_rgba(99,102,241,0.6)]"></div>
+              <div className={`h-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.6)] transition-all duration-1000 ${isProcessing ? 'w-full animate-pulse' : 'w-2/5'}`}></div>
             </div>
-            <p className="text-[10px] text-indigo-400 mt-2 font-bold uppercase">Cloud Sync Active</p>
+            <p className="text-[10px] text-indigo-400 mt-2 font-bold uppercase">
+              {isProcessing ? 'Agent Active' : 'Cloud Sync Active'}
+            </p>
           </div>
 
           {onLogout && (

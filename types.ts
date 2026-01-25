@@ -154,7 +154,6 @@ export interface MatchResult {
 
 export type ResumeTemplate = 'Modern' | 'Classic' | 'Tech' | 'Executive';
 
-// Added missing types for JobHunter and ApplicationTracker components
 export enum CoverLetterStyle {
   MODERN = 'Modern',
   CLASSIC = 'Classic',
@@ -188,9 +187,19 @@ export interface ApplicationLog {
   verification?: VerificationProof;
 }
 
+export interface TaskState {
+  id: string;
+  status: 'idle' | 'running' | 'completed' | 'error';
+  progress: number;
+  message: string;
+  error?: string;
+}
+
 export interface AppState {
   profile: UserProfile | null;
   applications: ApplicationLog[];
   activeStrategy: any;
   discoveredJobs: DiscoveredJob[];
+  roadmap: CareerRoadmap | null;
+  tasks: Record<string, TaskState>;
 }
