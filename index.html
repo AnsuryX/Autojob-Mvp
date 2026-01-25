@@ -17,6 +17,7 @@
       const defaultEnv = {
         SUPABASE_URL: "https://mkwuyxigbnyrkcwvfgjq.supabase.co",
         SUPABASE_ANON_KEY: "sb_publishable_VDrYtNeRIrz1NMp87QAWXA_2LzlC2o-",
+        SERP_API_KEY: "27ddff8705491b7d7afea84cb7542b47959e724308e28dd08cf6e5fadef425bb"
       };
       
       // Merge: Platform Env > Default Env
@@ -54,6 +55,11 @@
         100% { transform: translateY(100%); }
       }
       .animate-scan { animation: scan 2s linear infinite; }
+      .glass-card {
+        background: rgba(255, 255, 255, 0.7);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-900 font-sans antialiased overflow-x-hidden">

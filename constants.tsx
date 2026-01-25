@@ -14,23 +14,36 @@ export const DEFAULT_PROFILE: any = {
       id: "frontend-track",
       name: "Senior Frontend Developer",
       content: {
-        summary: "Senior Software Engineer with 8 years of experience in React and Node.js.",
-        skills: ["React", "TypeScript", "Node.js", "AWS", "Tailwind"],
+        summary: "Senior Software Engineer with 8 years of experience in React and Node.js. Passionate about building performant, accessible web applications and leading technical teams to success.",
+        skills: ["React", "TypeScript", "Node.js", "AWS", "Tailwind", "System Design"],
         experience: [
           {
             company: "Tech Giant Corp",
             role: "Senior Frontend Engineer",
             duration: "2020 - Present",
-            achievements: ["Led migration to Microfrontends", "Improved CI/CD times by 40%"]
+            achievements: [
+              "Led the migration of a legacy monolith to a modern microfrontends architecture, reducing deployment times by 60%.",
+              "Implemented automated accessibility testing pipeline, ensuring WCAG 2.1 compliance across 5 major product lines.",
+              "Mentored 5 junior engineers, resulting in 3 internal promotions within one year."
+            ]
           }
         ],
         projects: [
           {
             name: "Open Source UI Lib",
-            description: "A headless UI library for React.",
+            description: "A headless UI library for React with 5k+ GitHub stars.",
             technologies: ["React", "Tailwind", "Jest"]
           }
-        ]
+        ],
+        education: [
+          {
+            institution: "University of Technology",
+            degree: "B.S. in Computer Science",
+            duration: "2012 - 2016"
+          }
+        ],
+        languages: ["English (Native)", "Spanish (Conversational)"],
+        certifications: ["AWS Solutions Architect", "Professional Scrum Master I"]
       }
     }
   ],

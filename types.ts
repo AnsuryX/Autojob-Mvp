@@ -4,6 +4,21 @@ export interface ResumeJson {
   skills: string[];
   experience: Experience[];
   projects: Project[];
+  education?: Education[];
+  languages?: string[];
+  certifications?: Certification[];
+}
+
+export interface Education {
+  institution: string;
+  degree: string;
+  duration: string;
+}
+
+export interface Certification {
+  name: string;
+  issuer: string;
+  date: string;
 }
 
 export interface ResumeTrack {
@@ -25,21 +40,26 @@ export interface Project {
   technologies: string[];
 }
 
-export interface ResumeMutation {
-  mutatedResume: ResumeJson;
-  report: {
-    selectedTrackId?: string;
-    selectedTrackName?: string;
-    keywordsInjected: string[];
-    mirroredPhrases?: { original: string; mirrored: string }[];
-    reorderingJustification?: string;
-    atsScoreEstimate: number;
-    iterationCount?: number;
-    timings?: {
-      mutationMs: number;
-      analysisMs: number;
-    };
-  };
+export interface MarketInsights {
+  salaryRange: string;
+  demandTrend: 'High' | 'Stable' | 'Decreasing';
+  topSkills: string[];
+  recentNews: { title: string; url: string }[];
+  citations: { web: { uri: string; title: string } }[];
+}
+
+export interface RoadmapStep {
+  period: string;
+  goal: string;
+  actionItems: string[];
+  skillGain: string[];
+}
+
+export interface CareerRoadmap {
+  currentMarketValue: string;
+  targetMarketValue: string;
+  gapAnalysis: string;
+  steps: RoadmapStep[];
 }
 
 export interface UserProfile {
@@ -59,7 +79,6 @@ export interface UserProfile {
   };
 }
 
-// Added missing Job interface to fix errors in services/gemini.ts and components/JobHunter.tsx
 export interface Job {
   id: string;
   scrapedAt: string;
@@ -70,6 +89,8 @@ export interface Job {
   description: string;
   applyUrl: string;
   platform: string;
+  salary?: string;
+  thumbnail?: string;
 }
 
 export interface Gig {
@@ -81,6 +102,7 @@ export interface Gig {
   description: string;
   url: string;
   postedAt?: string;
+  thumbnail?: string;
 }
 
 export enum ApplicationStatus {
@@ -96,21 +118,51 @@ export enum ApplicationStatus {
   INTERPRETING = 'INTERPRETING',
   STRATEGIZING = 'STRATEGIZING',
   AUGMENTING = 'AUGMENTING',
-  VERIFYING = 'VERIFYING'
+  VERIFYING = 'VERIFYING',
+  INTERVIEWING = 'INTERVIEWING'
 }
 
 export interface CommandResult {
-  action: 'apply' | 'pause' | 'resume' | 'filter' | 'limit' | 'blocked' | 'status' | 'strategy' | 'find_gigs';
+  action: 'apply' | 'search_jobs' | 'update_profile' | 'improve_resume' | 'status' | 'strategy' | 'find_gigs' | 'blocked' | 'switch_tab' | 'start_interview';
   goal?: string;
-  filters?: {
-    role?: string;
-    location?: string;
-    remote?: boolean;
-    company_type?: string;
+  params?: {
+    profile_updates?: Partial<UserProfile>;
+    preferences_updates?: Partial<UserProfile['preferences']>;
+    improvement_prompt?: string;
+    target_tab?: string;
+    query?: string;
   };
 }
 
-// Added missing VerificationProof interface to fix errors in components/JobHunter.tsx
+export interface DiscoveredJob {
+  title: string;
+  company: string;
+  location: string;
+  url: string;
+  source: string;
+  salary?: string;
+  thumbnail?: string;
+  description?: string;
+  postedAt?: string;
+}
+
+export interface MatchResult {
+  score: number;
+  reasoning: string;
+  missingSkills: string[];
+}
+
+export type ResumeTemplate = 'Modern' | 'Classic' | 'Tech' | 'Executive';
+
+// Added missing types for JobHunter and ApplicationTracker components
+export enum CoverLetterStyle {
+  MODERN = 'Modern',
+  CLASSIC = 'Classic',
+  TECH = 'Tech',
+  EXECUTIVE = 'Executive',
+  CHILL_PROFESSIONAL = 'Chill Professional'
+}
+
 export interface VerificationProof {
   virtualScreenshot?: string;
   networkLogs?: string[];
@@ -128,35 +180,17 @@ export interface ApplicationLog {
   platform?: string;
   location?: string;
   coverLetter?: string;
-  mutatedResume?: ResumeJson;
-  mutationReport?: any;
+  mutatedResume?: any;
+  mutationReport?: {
+    atsScoreEstimate?: number;
+    keywordsInjected?: string[];
+  };
   verification?: VerificationProof;
 }
 
 export interface AppState {
   profile: UserProfile | null;
   applications: ApplicationLog[];
-  activeStrategy: any | null;
-}
-
-export interface DiscoveredJob {
-  title: string;
-  company: string;
-  location: string;
-  url: string;
-  source: string;
-}
-
-export interface MatchResult {
-  score: number;
-  reasoning: string;
-  missingSkills: string[];
-}
-
-export enum CoverLetterStyle {
-  ULTRA_CONCISE = 'Ultra Concise',
-  RESULTS_DRIVEN = 'Results Driven',
-  FOUNDER_FRIENDLY = 'Founder Friendly',
-  TECHNICAL_DEEP_CUT = 'Technical Deep-Cut',
-  CHILL_PROFESSIONAL = 'Chill but Professional'
+  activeStrategy: any;
+  discoveredJobs: DiscoveredJob[];
 }

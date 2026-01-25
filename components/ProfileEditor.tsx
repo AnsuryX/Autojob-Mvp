@@ -1,15 +1,16 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { UserProfile, ResumeTrack, Project } from '../types';
+import { UserProfile, ResumeTrack, Project, Experience } from '../types';
 import { parseResume } from '../services/gemini';
 import { jsPDF } from 'jspdf';
 
 interface ProfileEditorProps {
   profile: UserProfile;
   onSave: (profile: UserProfile) => void;
+  onLogout?: () => void;
 }
 
-const ProfileEditor: React.FC<ProfileEditorProps> = ({ profile, onSave }) => {
+const ProfileEditor: React.FC<ProfileEditorProps> = ({ profile, onSave, onLogout }) => {
   const [editedProfile, setEditedProfile] = useState(profile);
   const [isParsing, setIsParsing] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -74,7 +75,7 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ profile, onSave }) => {
   const removeTrack = (id: string) => {
     setEditedProfile(prev => ({
       ...prev,
-      resumeTracks: prev.resumeTracks.filter(t => t.id !== id)
+      resumeTracks: (prev.resumeTracks || []).filter(t => t.id !== id)
     }));
   };
 
@@ -83,23 +84,48 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ profile, onSave }) => {
       const parsed = JSON.parse(jsonStr);
       setEditedProfile(prev => ({
         ...prev,
-        resumeTracks: prev.resumeTracks.map(t => t.id === id ? { ...t, content: parsed } : t)
+        resumeTracks: (prev.resumeTracks || []).map(t => t.id === id ? { ...t, content: parsed } : t)
       }));
     } catch (e) {
       setSaveStatus('error');
     }
   };
 
-  const addProjectToTrack = (trackId: string) => {
-    const newProject: Project = {
-      name: "New Impact Project",
-      description: "Explain the high-level goal and your specific contributions here.",
-      technologies: ["Tech Stack"]
+  const addExperienceToTrack = (trackId: string) => {
+    const newExp: Experience = {
+      company: "New Company",
+      role: "Software Engineer",
+      duration: "2024 - Present",
+      achievements: ["Successfully implemented X", "Led team of Y developers"]
     };
 
     setEditedProfile(prev => ({
       ...prev,
-      resumeTracks: prev.resumeTracks.map(t => {
+      resumeTracks: (prev.resumeTracks || []).map(t => {
+        if (t.id === trackId) {
+          return {
+            ...t,
+            content: {
+              ...t.content,
+              experience: [...(t.content.experience || []), newExp]
+            }
+          };
+        }
+        return t;
+      })
+    }));
+  };
+
+  const addProjectToTrack = (trackId: string) => {
+    const newProject: Project = {
+      name: "New Impact Project",
+      description: "Explain the high-level goal and your specific contributions here.",
+      technologies: ["React", "TypeScript"]
+    };
+
+    setEditedProfile(prev => ({
+      ...prev,
+      resumeTracks: (prev.resumeTracks || []).map(t => {
         if (t.id === trackId) {
           return {
             ...t,
@@ -123,11 +149,11 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ profile, onSave }) => {
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(22);
-    doc.text(editedProfile.fullName, margin, y);
+    doc.text(editedProfile.fullName || "Candidate", margin, y);
     y += 8;
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
-    doc.text(`${editedProfile.email} | ${editedProfile.phone} | ${editedProfile.linkedin}`, margin, y);
+    doc.text(`${editedProfile.email || ""} | ${editedProfile.phone || ""} | ${editedProfile.linkedin || ""}`, margin, y);
     y += 15;
 
     doc.setFontSize(14);
@@ -136,7 +162,7 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ profile, onSave }) => {
     y += 6;
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
-    const summaryLines = doc.splitTextToSize(track.content.summary, maxWidth);
+    const summaryLines = doc.splitTextToSize(track.content.summary || "", maxWidth);
     doc.text(summaryLines, margin, y);
     y += (summaryLines.length * 5) + 12;
 
@@ -175,20 +201,31 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ profile, onSave }) => {
             </div>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
            <input type="file" className="hidden" ref={fileInputRef} accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.txt" onChange={handleFileUpload}/>
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={isParsing}
-            className="bg-indigo-600 text-white hover:bg-indigo-700 px-6 py-3 rounded-2xl transition-all font-bold shadow-xl flex items-center gap-3 active:scale-95 disabled:opacity-50"
+            className="bg-indigo-600 text-white hover:bg-indigo-700 px-5 py-2.5 rounded-xl transition-all font-bold shadow-sm flex items-center gap-2 active:scale-95 disabled:opacity-50 text-sm"
           >
             {isParsing ? (
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
             ) : (
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
             )}
-            {isParsing ? 'Neural Parsing...' : 'Import Base Resume'}
+            {isParsing ? 'Neural Parsing...' : 'Import Resume'}
           </button>
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="border border-slate-200 text-slate-500 hover:text-red-600 hover:border-red-100 hover:bg-red-50 px-5 py-2.5 rounded-xl transition-all font-bold text-sm flex items-center gap-2 active:scale-95"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              Sign Out
+            </button>
+          )}
         </div>
       </header>
 
@@ -203,7 +240,7 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ profile, onSave }) => {
               <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Legal Full Name</label>
               <input
                 type="text"
-                value={editedProfile.fullName}
+                value={editedProfile.fullName || ""}
                 onChange={(e) => setEditedProfile({...editedProfile, fullName: e.target.value})}
                 placeholder="John Doe"
                 className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-700 transition-all"
@@ -213,40 +250,40 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ profile, onSave }) => {
               <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Primary Email</label>
               <input
                 type="email"
-                value={editedProfile.email}
+                value={editedProfile.email || ""}
                 onChange={(e) => setEditedProfile({...editedProfile, email: e.target.value})}
                 placeholder="contact@example.com"
-                className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-700 transition-all"
+                className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-medium transition-all"
               />
             </div>
             <div className="space-y-2">
               <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Phone Number</label>
               <input
                 type="text"
-                value={editedProfile.phone}
+                value={editedProfile.phone || ""}
                 onChange={(e) => setEditedProfile({...editedProfile, phone: e.target.value})}
                 placeholder="+1 (555) 000-0000"
-                className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-700 transition-all"
+                className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-medium transition-all"
               />
             </div>
             <div className="space-y-2">
               <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">LinkedIn Profile URL</label>
               <input
                 type="text"
-                value={editedProfile.linkedin}
+                value={editedProfile.linkedin || ""}
                 onChange={(e) => setEditedProfile({...editedProfile, linkedin: e.target.value})}
                 placeholder="linkedin.com/in/username"
-                className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-700 transition-all"
+                className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-medium transition-all"
               />
             </div>
             <div className="space-y-2">
               <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Portfolio / Website</label>
               <input
                 type="text"
-                value={editedProfile.portfolio}
+                value={editedProfile.portfolio || ""}
                 onChange={(e) => setEditedProfile({...editedProfile, portfolio: e.target.value})}
                 placeholder="portfolio.dev"
-                className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-700 transition-all"
+                className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-medium transition-all"
               />
             </div>
           </div>
@@ -261,7 +298,7 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ profile, onSave }) => {
              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Target Profiles: {editedProfile.resumeTracks?.length || 0}</p>
           </div>
           <div className="space-y-10">
-            {editedProfile.resumeTracks?.map((track) => (
+            {(editedProfile.resumeTracks || []).map((track) => (
               <div key={track.id} className="bg-slate-50 p-8 rounded-[2rem] border border-slate-200 relative group transition-all hover:border-indigo-200 hover:shadow-lg">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                   <div className="flex-1">
@@ -270,26 +307,33 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ profile, onSave }) => {
                       value={track.name}
                       onChange={(e) => setEditedProfile({
                         ...editedProfile,
-                        resumeTracks: editedProfile.resumeTracks.map(t => t.id === track.id ? { ...t, name: e.target.value } : t)
+                        resumeTracks: (editedProfile.resumeTracks || []).map(t => t.id === track.id ? { ...t, name: e.target.value } : t)
                       })}
                       className="bg-transparent font-black text-slate-900 text-xl border-none focus:ring-0 p-0 w-full"
                     />
                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Track Identifier</p>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button 
                       onClick={() => downloadBaseTrack(track)}
                       className="bg-slate-900 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm active:scale-95 flex items-center gap-2"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                      Download Base
+                      Download
+                    </button>
+                    <button 
+                      onClick={() => addExperienceToTrack(track.id)}
+                      className="bg-white text-emerald-600 border border-emerald-100 hover:bg-emerald-600 hover:text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm active:scale-95 flex items-center gap-2"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
+                      + Experience
                     </button>
                     <button 
                       onClick={() => addProjectToTrack(track.id)}
                       className="bg-white text-indigo-600 border border-indigo-100 hover:bg-indigo-600 hover:text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm active:scale-95 flex items-center gap-2"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
-                      Add Project
+                      + Project
                     </button>
                     <button 
                       onClick={() => removeTrack(track.id)} 
@@ -310,7 +354,7 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ profile, onSave }) => {
                     onBlur={(e) => updateTrackJson(track.id, e.target.value)}
                     className="w-full bg-slate-900 text-indigo-400 p-6 rounded-2xl font-mono text-[11px] h-80 shadow-inner outline-none focus:ring-2 focus:ring-indigo-500 transition-all scrollbar-hide"
                   />
-                  <p className="text-[9px] text-slate-400 font-medium italic text-right px-2">Cloud-syncing JSON payload in real-time.</p>
+                  <p className="text-[9px] text-slate-400 font-medium italic text-right px-2">Cloud-syncing JSON payload in real-time. Supports 'education', 'languages', and 'certifications'.</p>
                 </div>
               </div>
             ))}
