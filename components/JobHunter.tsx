@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { extractJobData, calculateMatchScore, generateCoverLetter, searchJobsPro, mutateResume, getMarketInsights } from '../services/gemini.ts';
 import { Job, UserProfile, ApplicationStatus, ApplicationLog, DiscoveredJob, CoverLetterStyle, VerificationProof, MarketInsights, TaskState } from '../types.ts';
 import { Icons } from '../constants.tsx';
@@ -29,6 +29,31 @@ const JobHunter: React.FC<JobHunterProps> = ({ profile, discoveredJobs, onDiscov
   const addLog = useCallback((msg: string) => setLogs(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev]), []);
 
   const isSearching = task.status === 'running';
+  const isSearchComplete = task.status === 'completed';
+
+  const progressValue = useMemo(() => {
+    switch (automationStep) {
+      case ApplicationStatus.EXTRACTING: return 20;
+      case ApplicationStatus.MATCHING: return 40;
+      case ApplicationStatus.GENERATING_CL: return 60;
+      case ApplicationStatus.MUTATING_RESUME: return 80;
+      case ApplicationStatus.VERIFYING: return 95;
+      case ApplicationStatus.COMPLETED: return 100;
+      default: return 0;
+    }
+  }, [automationStep]);
+
+  const stepMessage = useMemo(() => {
+    switch (automationStep) {
+      case ApplicationStatus.EXTRACTING: return "Deconstructing Job Metadata...";
+      case ApplicationStatus.MATCHING: return "Correlating Skill Matrices...";
+      case ApplicationStatus.GENERATING_CL: return "Synthesizing Persuasive Narrative...";
+      case ApplicationStatus.MUTATING_RESUME: return "Optimizing Keyword Density...";
+      case ApplicationStatus.VERIFYING: return "Performing Final Validation...";
+      case ApplicationStatus.COMPLETED: return "Agent Workflow Complete";
+      default: return "Awaiting Instructions...";
+    }
+  }, [automationStep]);
 
   const processInput = async (inputOverride?: string) => {
     const target = inputOverride || jobInput;
@@ -55,7 +80,6 @@ const JobHunter: React.FC<JobHunterProps> = ({ profile, discoveredJobs, onDiscov
         setMarketInsights(insights);
       } else {
         setAutomationStep(ApplicationStatus.STRATEGIZING);
-        // Discovery is now partially handled by Global Task in App but can be triggered here too
         const [results, insights] = await Promise.all([
           searchJobsPro(target),
           getMarketInsights(target)
@@ -101,23 +125,37 @@ const JobHunter: React.FC<JobHunterProps> = ({ profile, discoveredJobs, onDiscov
       addLog(`Synthesis Failed: ${e.message}`);
     } finally {
       setIsProcessing(false);
+      // Keep completion state visible for a moment before resetting to PENDING
+      setTimeout(() => {
+        if (automationStep === ApplicationStatus.COMPLETED) {
+          setAutomationStep(ApplicationStatus.PENDING);
+        }
+      }, 3000);
     }
   };
 
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-sm space-y-4 relative overflow-hidden">
-        {isSearching && (
+        {(isSearching || (isProcessing && automationStep === ApplicationStatus.STRATEGIZING)) && (
           <div className="absolute top-0 left-0 right-0 h-1 bg-indigo-600 animate-[loading_2s_ease-in-out_infinite] shadow-[0_0_10px_rgba(79,70,229,0.5)]"></div>
         )}
         
         <div className="flex justify-between items-center">
-          <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-            <Icons.Briefcase /> Lead Discovery Hub
-          </h2>
-          {isSearching && (
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+              <Icons.Briefcase /> Lead Discovery Hub
+            </h2>
+            {isSearchComplete && (
+              <span className="animate-success-pop flex items-center gap-1 bg-emerald-50 text-emerald-600 text-[9px] font-black px-2 py-0.5 rounded-full border border-emerald-100 uppercase tracking-widest">
+                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                Updated
+              </span>
+            )}
+          </div>
+          {(isSearching || (isProcessing && automationStep === ApplicationStatus.STRATEGIZING)) && (
             <span className="text-[9px] font-black text-indigo-600 uppercase tracking-widest animate-pulse">
-              Background Scan Active: {task.message}
+              Agent Scanning: {task.message || "Synthesizing Results..."}
             </span>
           )}
         </div>
@@ -136,14 +174,14 @@ const JobHunter: React.FC<JobHunterProps> = ({ profile, discoveredJobs, onDiscov
             disabled={isProcessing || isSearching || !jobInput}
             className="absolute right-2 top-2 bottom-2 bg-slate-900 hover:bg-black text-white px-6 rounded-xl text-[10px] font-black uppercase tracking-widest disabled:opacity-50 transition-all"
           >
-            {isProcessing || isSearching ? 'Processing...' : 'Neural Search'}
+            {(isProcessing && automationStep === ApplicationStatus.STRATEGIZING) || isSearching ? 'Searching...' : 'Neural Search'}
           </button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Discovery List */}
-        <div className={`${currentJob ? 'lg:col-span-4' : 'lg:col-span-8'} space-y-3`}>
+        <div className={`${currentJob ? 'lg:col-span-4' : 'lg:col-span-8'} space-y-3 transition-all duration-500`}>
           {discoveredJobs?.map((job, i) => (
             <div 
               key={i} 
@@ -174,8 +212,47 @@ const JobHunter: React.FC<JobHunterProps> = ({ profile, discoveredJobs, onDiscov
           )}
         </div>
 
-        {/* Selected Content / Insights */}
-        <div className={`${currentJob ? 'lg:col-span-8' : 'lg:col-span-4'} space-y-6`}>
+        {/* Selected Content / Insights / Progress */}
+        <div className={`${currentJob ? 'lg:col-span-8' : 'lg:col-span-4'} space-y-6 transition-all duration-500`}>
+          
+          {/* Agent Action Progress Panel */}
+          {isProcessing && automationStep !== ApplicationStatus.PENDING && automationStep !== ApplicationStatus.STRATEGIZING && (
+            <div className="bg-white rounded-[2rem] border border-indigo-100 p-8 shadow-xl space-y-6 animate-in slide-in-from-top-4">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white">
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  </div>
+                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Agent Activity</h3>
+                </div>
+                <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full uppercase">{progressValue}%</span>
+              </div>
+              
+              <div className="space-y-3">
+                <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+                  <span>{stepMessage}</span>
+                  <span className="animate-pulse">Active Turn...</span>
+                </div>
+                <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-indigo-600 transition-all duration-700 ease-out relative"
+                    style={{ width: `${progressValue}%` }}
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-scan"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-slate-50 p-4 rounded-xl space-y-2">
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Neural Stream</p>
+                <div className="h-12 overflow-hidden text-[10px] font-mono text-slate-500 space-y-1">
+                  <p className="animate-in fade-in slide-in-from-bottom-1">>> Allocating high-compute clusters...</p>
+                  <p className="animate-in fade-in slide-in-from-bottom-1 delay-75">>> Accessing live market vectors...</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {marketInsights && (
             <div className="bg-indigo-900 rounded-[2rem] p-8 text-white shadow-2xl space-y-6 animate-in fade-in zoom-in-95">
               <div className="flex justify-between items-center">
@@ -221,14 +298,14 @@ const JobHunter: React.FC<JobHunterProps> = ({ profile, discoveredJobs, onDiscov
                     <h3 className="text-xl font-black text-slate-900">{currentJob.title}</h3>
                     <p className="text-slate-500 font-bold">{currentJob.company}</p>
                   </div>
-                  <button onClick={() => setCurrentJob(null)} className="p-2 text-slate-300 hover:text-red-500"><Icons.Close /></button>
+                  <button onClick={() => setCurrentJob(null)} className="p-2 text-slate-300 hover:text-red-500 transition-colors"><Icons.Close /></button>
                </div>
                
                {match && (
-                 <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                 <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 group hover:border-indigo-200 transition-all">
                     <div className="flex items-end gap-2 mb-2">
                        <span className="text-3xl font-black text-slate-900">{match.score}%</span>
-                       <span className="text-[10px] font-bold text-slate-400 uppercase pb-1.5">Match</span>
+                       <span className="text-[10px] font-bold text-slate-400 uppercase pb-1.5">Match Intelligence</span>
                     </div>
                     <p className="text-xs text-slate-600 font-medium italic">"{match.reasoning}"</p>
                  </div>
@@ -238,13 +315,16 @@ const JobHunter: React.FC<JobHunterProps> = ({ profile, discoveredJobs, onDiscov
                  <button 
                   onClick={startTailoring} 
                   disabled={isProcessing}
-                  className="bg-indigo-600 text-white p-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all disabled:opacity-50"
+                  className="bg-indigo-600 text-white p-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all disabled:opacity-50 relative overflow-hidden group shadow-lg shadow-indigo-200"
                  >
-                    {isProcessing ? 'Synthesizing...' : 'Generate Dispatch Kit'}
+                    <span className="relative z-10">{isProcessing ? 'Synthesizing Artifacts...' : 'Generate Dispatch Kit'}</span>
+                    {isProcessing && (
+                       <div className="absolute inset-0 bg-indigo-500/20 animate-pulse"></div>
+                    )}
                  </button>
                  <button 
                   onClick={() => onTabSwitch?.('interview')} 
-                  className="bg-slate-900 text-white p-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all"
+                  className="bg-slate-900 text-white p-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all shadow-lg shadow-slate-200"
                  >
                     Start Interview Chamber
                  </button>

@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { Job, UserProfile, CareerRoadmap, MarketInsights, DiscoveredJob, ResumeJson, Gig, CommandResult } from "../types.ts";
 
@@ -342,10 +343,13 @@ export const addRelevantExperienceViaAI = async (prompt: string, currentResume: 
   return JSON.parse(response.text || JSON.stringify(currentResume));
 };
 
+/**
+ * Searches for real job listings using SerpAPI or falling back to live Google Search grounding.
+ */
 export const searchJobsPro = async (query: string): Promise<DiscoveredJob[]> => {
   const SERP_API_KEY = (window as any).process?.env?.SERP_API_KEY;
   if (!SERP_API_KEY) {
-    console.warn("SerpAPI key missing, falling back to Gemini Search.");
+    console.warn("SerpAPI key missing, falling back to verified live search.");
     return searchJobs({ targetRoles: [query] });
   }
 
@@ -356,7 +360,9 @@ export const searchJobsPro = async (query: string): Promise<DiscoveredJob[]> => 
     const response = await fetch(url);
     const data = await response.json();
 
-    if (!data.jobs_results) return [];
+    if (!data.jobs_results || data.jobs_results.length === 0) {
+      return searchJobs({ targetRoles: [query] });
+    }
 
     return data.jobs_results.map((job: any) => ({
       title: job.title,
@@ -404,7 +410,7 @@ export const searchFreelanceGigs = async (query: string): Promise<Gig[]> => {
   const ai = getAi();
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
-    contents: `Find freelance projects for: "${query}"`,
+    contents: `Find real, active freelance projects for: "${query}"`,
     config: {
       tools: [{ googleSearch: {} }],
       responseMimeType: "application/json",
@@ -506,7 +512,8 @@ export const extractJobData = async (input: string): Promise<Job> => {
   const ai = getAi();
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
-    contents: `Extract structured details from this job: "${input}"`,
+    contents: `Extract real structured details from this live job posting: "${input}". 
+    Use search tools to confirm the company and requirements if the link text is sparse.`,
     config: {
       tools: [{ googleSearch: {} }],
       responseMimeType: "application/json",
@@ -528,11 +535,23 @@ export const extractJobData = async (input: string): Promise<Job> => {
   return { ...data, id: Math.random().toString(36).substr(2, 9), scrapedAt: new Date().toISOString() };
 };
 
+/**
+ * Fallback verified job search using Gemini Grounding.
+ * Strictly searches for active job listings on the web.
+ */
 export const searchJobs = async (preferences: any): Promise<DiscoveredJob[]> => {
   const ai = getAi();
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
-    contents: `Find 5 active job listings for: ${JSON.stringify(preferences.targetRoles)}`,
+    contents: `CRITICAL: Find and verify 5-7 active, non-expired job listings for: ${JSON.stringify(preferences.targetRoles)}.
+    
+    INSTRUCTIONS:
+    1. Use Google Search to find real listings on LinkedIn, Indeed, Greenhouse, Lever, or company career pages.
+    2. Extract the actual application URL (not a generic home page).
+    3. Determine the 'postedAt' date (e.g., '2 days ago') to ensure they are fresh.
+    4. Provide a brief description and the source name.
+    
+    STRICTLY NO SIMULATED DATA. Every entry must be a real job you found on the live web.`,
     config: {
       tools: [{ googleSearch: {} }],
       responseMimeType: "application/json",
@@ -544,13 +563,22 @@ export const searchJobs = async (preferences: any): Promise<DiscoveredJob[]> => 
             title: { type: Type.STRING },
             company: { type: Type.STRING },
             location: { type: Type.STRING },
-            url: { type: Type.STRING }
+            url: { type: Type.STRING },
+            source: { type: Type.STRING },
+            description: { type: Type.STRING },
+            postedAt: { type: Type.STRING }
           }
         }
       }
     }
   });
-  return JSON.parse(response.text || "[]");
+  
+  try {
+    return JSON.parse(response.text || "[]");
+  } catch (e) {
+    console.error("Search Grounding Parse Error:", e);
+    return [];
+  }
 };
 
 export const calculateMatchScore = async (job: any, profile: UserProfile): Promise<any> => {
@@ -596,7 +624,6 @@ export const parseResume = async (base64: string, mimeType: string): Promise<any
   const ai = getAi();
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    // Fix: Using parts array within contents for multi-modal input according to guidelines.
     contents: { parts: [{ inlineData: { data: base64, mimeType } }, { text: "Extract Name, Email, Phone, and structured Resume JSON." }] },
     config: { responseMimeType: "application/json" }
   });

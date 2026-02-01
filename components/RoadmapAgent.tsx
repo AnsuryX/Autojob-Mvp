@@ -11,6 +11,7 @@ interface RoadmapAgentProps {
 
 const RoadmapAgent: React.FC<RoadmapAgentProps> = ({ roadmap, task, onTrigger }) => {
   const isRunning = task.status === 'running';
+  const isCompleted = task.status === 'completed';
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-20">
@@ -27,7 +28,15 @@ const RoadmapAgent: React.FC<RoadmapAgentProps> = ({ roadmap, task, onTrigger })
 
         <div className="flex justify-between items-start">
           <div className="space-y-2">
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight">Strategic Career Navigator</h2>
+            <div className="flex items-center gap-3">
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight">Strategic Career Navigator</h2>
+              {isCompleted && (
+                <span className="animate-success-pop flex items-center gap-1 bg-emerald-50 text-emerald-600 text-[10px] font-black px-3 py-1 rounded-full border border-emerald-100 uppercase tracking-widest">
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                  Strategy Ready
+                </span>
+              )}
+            </div>
             <p className="text-slate-500 text-sm">Long-term gap analysis and market-driven evolution strategy.</p>
           </div>
           <button 
@@ -40,7 +49,7 @@ const RoadmapAgent: React.FC<RoadmapAgentProps> = ({ roadmap, task, onTrigger })
                 <div className="w-3 h-3 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
                 Agent Working...
               </>
-            ) : 'Generate Evolution Plan'}
+            ) : isCompleted ? 'Regenerate Evolution Plan' : 'Generate Evolution Plan'}
           </button>
         </div>
 

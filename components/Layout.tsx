@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Icons } from '../constants';
 
 interface LayoutProps {
@@ -11,6 +11,18 @@ interface LayoutProps {
 }
 
 const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, onLogout, isProcessing }) => {
+  const [showSuccessGlow, setShowSuccessGlow] = useState(false);
+
+  useEffect(() => {
+    if (!isProcessing) {
+      // If it was processing and now stopped, it might be a completion
+      // We trigger a brief success pulse in the sidebar
+      setShowSuccessGlow(true);
+      const timer = setTimeout(() => setShowSuccessGlow(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [isProcessing]);
+
   const tabs = [
     { id: 'discover', label: 'Job Hunter', icon: <Icons.Briefcase /> },
     { id: 'resume_lab', label: 'Resume Lab', icon: (
@@ -53,17 +65,17 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, onLo
         ))}
 
         <div className="mt-auto space-y-4">
-          <div className={`p-4 rounded-2xl border shadow-xl overflow-hidden relative transition-all duration-500 ${isProcessing ? 'bg-indigo-900 border-indigo-500' : 'bg-slate-900 border-slate-800'}`}>
+          <div className={`p-4 rounded-2xl border shadow-xl overflow-hidden relative transition-all duration-500 ${isProcessing ? 'bg-indigo-900 border-indigo-500' : showSuccessGlow ? 'bg-emerald-900 border-emerald-500 animate-success-glow' : 'bg-slate-900 border-slate-800'}`}>
             <div className="absolute top-0 right-0 w-16 h-16 bg-indigo-500/10 rounded-full -mr-8 -mt-8 blur-2xl"></div>
             <div className="flex justify-between items-center mb-2">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ASM Status</p>
-              <div className={`w-1.5 h-1.5 rounded-full ${isProcessing ? 'bg-indigo-400 animate-ping' : 'bg-green-500'}`}></div>
+              <div className={`w-1.5 h-1.5 rounded-full ${isProcessing ? 'bg-indigo-400 animate-ping' : showSuccessGlow ? 'bg-emerald-400' : 'bg-green-500'}`}></div>
             </div>
             <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
-              <div className={`h-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.6)] transition-all duration-1000 ${isProcessing ? 'w-full animate-pulse' : 'w-2/5'}`}></div>
+              <div className={`h-full shadow-[0_0_8px_rgba(99,102,241,0.6)] transition-all duration-1000 ${isProcessing ? 'w-full animate-pulse bg-indigo-500' : showSuccessGlow ? 'w-full bg-emerald-500' : 'w-2/5 bg-indigo-500'}`}></div>
             </div>
-            <p className="text-[10px] text-indigo-400 mt-2 font-bold uppercase">
-              {isProcessing ? 'Agent Active' : 'Cloud Sync Active'}
+            <p className={`text-[10px] mt-2 font-bold uppercase ${showSuccessGlow && !isProcessing ? 'text-emerald-400' : 'text-indigo-400'}`}>
+              {isProcessing ? 'Agent Active' : showSuccessGlow ? 'Task Completed' : 'Cloud Sync Active'}
             </p>
           </div>
 
