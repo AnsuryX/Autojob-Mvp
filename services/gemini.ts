@@ -1,10 +1,14 @@
-
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { Job, UserProfile, CareerRoadmap, MarketInsights, DiscoveredJob, ResumeJson, Gig, CommandResult, OutreachDraft, InterviewScorecard, TranscriptAnnotation } from "../types.ts";
 
+/**
+ * Ensures the API Key is fetched from the standard environment variable location.
+ */
 const getAi = () => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey) throw new Error("Missing Gemini API Key.");
+  if (!apiKey) {
+    throw new Error("Gemini API Key is missing. Please set the API_KEY environment variable in your deployment dashboard.");
+  }
   return new GoogleGenAI({ apiKey });
 };
 

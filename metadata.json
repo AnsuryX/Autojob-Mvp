@@ -1,6 +1,6 @@
 {
-  "name": "AutoJob MVP",
-  "description": "A production-ready job application automation tool that uses AI to match profiles, extract job details, and simulate human-like application processes.",
+  "name": "AutoJob Cloud",
+  "description": "Autonomous Career Navigator & Job Application Agent",
   "requestFramePermissions": [
     "microphone"
   ]
