@@ -182,7 +182,7 @@ const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({ applications, p
                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Neural Telemetry</p>
                         <ul className="mt-2 space-y-1">
                           {selectedResume.verification?.networkLogs?.slice(0, 4).map((log, i) => (
-                            <li key={i} className="text-[9px] font-mono text-slate-500 truncate">>> {log}</li>
+                            <li key={i} className="text-[9px] font-mono text-slate-500 truncate">{'>> '}{log}</li>
                           ))}
                         </ul>
                       </div>
