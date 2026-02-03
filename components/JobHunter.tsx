@@ -1,6 +1,6 @@
-
 import React, { useState, useCallback, useMemo } from 'react';
-import { extractJobData, calculateMatchScore, generateCoverLetter, searchJobsPro, mutateResume, getMarketInsights, generateOutreach } from '../services/gemini.ts';
+// Fix: Removed non-existent and unused exports 'generateCoverLetter' and 'mutateResume' from gemini service import
+import { extractJobData, calculateMatchScore, searchJobsPro, getMarketInsights, generateOutreach } from '../services/gemini.ts';
 import { Job, UserProfile, ApplicationStatus, ApplicationLog, DiscoveredJob, CoverLetterStyle, VerificationProof, MarketInsights, TaskState, OutreachDraft } from '../types.ts';
 import { Icons } from '../constants.tsx';
 

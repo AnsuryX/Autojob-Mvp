@@ -61,7 +61,7 @@ const CommandTerminal: React.FC<CommandTerminalProps> = ({ onExecute, isProcessi
         className="fixed bottom-6 right-6 w-14 h-14 bg-slate-900 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 transition-all z-40 border border-indigo-500/30 group"
       >
         <div className="absolute inset-0 bg-indigo-500 rounded-full blur opacity-20 group-hover:opacity-40 transition-opacity"></div>
-        <span className="font-mono text-2xl text-indigo-400 font-black relative z-10">{'>'}</span>
+        <span className="font-mono text-2xl text-indigo-400 font-black relative z-10">></span>
       </button>
     );
   }
@@ -70,7 +70,7 @@ const CommandTerminal: React.FC<CommandTerminalProps> = ({ onExecute, isProcessi
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-start justify-center pt-24 px-4 overflow-hidden">
       <div className="bg-slate-900 w-full max-w-2xl rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-slate-800 overflow-hidden animate-in zoom-in-95 duration-200">
         <form onSubmit={handleSubmit} className="flex items-center p-6 gap-4 border-b border-white/5">
-          <span className="font-mono text-indigo-500 font-black text-xl ml-2">{'>'}</span>
+          <span className="font-mono text-indigo-500 font-black text-xl ml-2">></span>
           <input
             ref={inputRef}
             type="text"

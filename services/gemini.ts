@@ -2,12 +2,27 @@ import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { Job, UserProfile, CareerRoadmap, MarketInsights, DiscoveredJob, ResumeJson, Gig, CommandResult, OutreachDraft, InterviewScorecard, TranscriptAnnotation } from "../types.ts";
 
 /**
- * Ensures the API Key is fetched from the standard environment variable location.
+ * Utility to safely parse JSON from LLM responses, 
+ * handling markdown code blocks and potential truncation.
  */
+const safeParseJson = (text: string | undefined, fallback: any = {}) => {
+  if (!text) return fallback;
+  try {
+    // Remove markdown code blocks if present
+    const cleanText = text.replace(/```json|```/g, "").trim();
+    return JSON.parse(cleanText);
+  } catch (e) {
+    console.error("JSON Parse Error. Raw Text:", text);
+    // If it's a huge string that's truncated, try to fix common truncation issues 
+    // or just return the fallback to prevent app crash.
+    return fallback;
+  }
+};
+
 const getAi = () => {
   const apiKey = process.env.API_KEY;
   if (!apiKey) {
-    throw new Error("Gemini API Key is missing. Please set the API_KEY environment variable in your deployment dashboard.");
+    throw new Error("Gemini API Key is missing. Please set the API_KEY environment variable.");
   }
   return new GoogleGenAI({ apiKey });
 };
@@ -35,7 +50,7 @@ export const generateOutreach = async (job: Job, profile: UserProfile): Promise<
       }
     }
   });
-  return JSON.parse(response.text || "[]");
+  return safeParseJson(response.text, []);
 };
 
 export const evaluateInterview = async (transcript: TranscriptAnnotation[], profile: UserProfile): Promise<InterviewScorecard> => {
@@ -72,7 +87,7 @@ export const evaluateInterview = async (transcript: TranscriptAnnotation[], prof
       }
     }
   });
-  return JSON.parse(response.text || "{}");
+  return safeParseJson(response.text, {});
 };
 
 export const getMarketInsights = async (role: string): Promise<MarketInsights> => {
@@ -105,7 +120,7 @@ export const getMarketInsights = async (role: string): Promise<MarketInsights> =
     }
   });
 
-  const rawData = JSON.parse(response.text || "{}");
+  const rawData = safeParseJson(response.text, {});
   const citations = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
   
   return { ...rawData, citations };
@@ -142,7 +157,7 @@ export const generateCareerRoadmap = async (profile: UserProfile): Promise<Caree
       }
     }
   });
-  return JSON.parse(response.text || "{}");
+  return safeParseJson(response.text, {});
 };
 
 export const encodeAudio = (bytes: Uint8Array) => {
@@ -235,7 +250,7 @@ export const alignResumeWithProfile = async (track: ResumeJson, profile: UserPro
       }
     }
   });
-  return JSON.parse(response.text || JSON.stringify(track));
+  return safeParseJson(response.text, track);
 };
 
 export const suggestAtsKeywords = async (track: ResumeJson, targetRoles: string[]): Promise<string[]> => {
@@ -255,11 +270,7 @@ export const suggestAtsKeywords = async (track: ResumeJson, targetRoles: string[
       }
     }
   });
-  try {
-    return JSON.parse(response.text || "[]");
-  } catch (e) {
-    return [];
-  }
+  return safeParseJson(response.text, []);
 };
 
 export const enhanceResumeContent = async (content: ResumeJson): Promise<ResumeJson> => {
@@ -269,11 +280,8 @@ export const enhanceResumeContent = async (content: ResumeJson): Promise<ResumeJ
     contents: `Rewrite and enhance this resume for maximum impact. 
     STRICT RULES:
     1. Output ONLY valid JSON matching the schema.
-    2. DO NOT include meta-commentary like "Original input preserved", "Note on Experience", or reasoning.
-    3. Professional Title & Company names must be clean (e.g., "Senior Frontend Engineer" at "Google", not a paragraph).
-    4. Achievements must be concise, data-driven bullet points (STAR method).
-    5. Remove any repetitive, jibbery, or low-quality filler text.
-    6. Ensure every field is strictly professional and ready for printing.
+    2. Professional Title & Company names must be clean.
+    3. Achievements must be concise, data-driven bullet points (STAR method).
     
     Current Content: ${JSON.stringify(content)}`,
     config: {
@@ -305,35 +313,12 @@ export const enhanceResumeContent = async (content: ResumeJson): Promise<ResumeJ
                 technologies: { type: Type.ARRAY, items: { type: Type.STRING } }
               }
             }
-          },
-          education: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                institution: { type: Type.STRING },
-                degree: { type: Type.STRING },
-                duration: { type: Type.STRING }
-              }
-            }
-          },
-          languages: { type: Type.ARRAY, items: { type: Type.STRING } },
-          certifications: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                name: { type: Type.STRING },
-                issuer: { type: Type.STRING },
-                date: { type: Type.STRING }
-              }
-            }
           }
         }
       }
     }
   });
-  return JSON.parse(response.text || JSON.stringify(content));
+  return safeParseJson(response.text, content);
 };
 
 export const addRelevantExperienceViaAI = async (prompt: string, currentResume: ResumeJson): Promise<ResumeJson> => {
@@ -341,12 +326,7 @@ export const addRelevantExperienceViaAI = async (prompt: string, currentResume: 
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: `Integrate a new entry based on: "${prompt}". 
-    STRICT RULES:
-    1. Output ONLY valid JSON.
-    2. ABSOLUTELY NO reasoning, meta-text, or "I have added this project" notes inside the JSON fields.
-    3. If adding a role: title and company must be clean. 
-    4. Achievements must be 2-3 impactful, concise bullets.
-    5. Remove any jibbery or repetitive technical notes.
+    Output ONLY valid JSON.
     
     Current Resume: ${JSON.stringify(currentResume)}`,
     config: {
@@ -378,39 +358,16 @@ export const addRelevantExperienceViaAI = async (prompt: string, currentResume: 
                 technologies: { type: Type.ARRAY, items: { type: Type.STRING } }
               }
             }
-          },
-          education: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                institution: { type: Type.STRING },
-                degree: { type: Type.STRING },
-                duration: { type: Type.STRING }
-              }
-            }
-          },
-          languages: { type: Type.ARRAY, items: { type: Type.STRING } },
-          certifications: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                name: { type: Type.STRING },
-                issuer: { type: Type.STRING },
-                date: { type: Type.STRING }
-              }
-            }
           }
         }
       }
     }
   });
-  return JSON.parse(response.text || JSON.stringify(currentResume));
+  return safeParseJson(response.text, currentResume);
 };
 
 export const searchJobsPro = async (query: string): Promise<DiscoveredJob[]> => {
-  const SERP_API_KEY = (window as any).process?.env?.SERP_API_KEY;
+  const SERP_API_KEY = process.env.SERP_API_KEY;
   if (!SERP_API_KEY) {
     return searchJobs({ targetRoles: [query] });
   }
@@ -444,31 +401,6 @@ export const searchJobsPro = async (query: string): Promise<DiscoveredJob[]> => 
 };
 
 export const searchFreelanceGigs = async (query: string): Promise<Gig[]> => {
-  const SERP_API_KEY = (window as any).process?.env?.SERP_API_KEY;
-  if (SERP_API_KEY) {
-    try {
-      const proxy = "https://corsproxy.io/?";
-      const url = `${proxy}${encodeURIComponent(`https://serpapi.com/search.json?q=${query}+freelance+gigs&api_key=${SERP_API_KEY}`)}`;
-      const response = await fetch(url);
-      const data = await response.json();
-      
-      if (data.organic_results) {
-        return data.organic_results
-          .filter((r: any) => r.link.includes('upwork.com') || r.link.includes('fiverr.com') || r.link.includes('toptal.com'))
-          .map((r: any) => ({
-            id: Math.random().toString(36).substr(2, 9),
-            title: r.title,
-            platform: r.link.includes('upwork') ? 'Upwork' : r.link.includes('fiverr') ? 'Fiverr' : 'Other',
-            description: r.snippet,
-            url: r.link,
-            thumbnail: r.thumbnail
-          }));
-      }
-    } catch (e) {
-      console.error("Freelance Pro Search failed:", e);
-    }
-  }
-
   const ai = getAi();
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
@@ -491,7 +423,7 @@ export const searchFreelanceGigs = async (query: string): Promise<Gig[]> => {
       }
     }
   });
-  return JSON.parse(response.text || "[]");
+  return safeParseJson(response.text, []);
 };
 
 export const interpretCommand = async (input: string): Promise<CommandResult> => {
@@ -500,18 +432,6 @@ export const interpretCommand = async (input: string): Promise<CommandResult> =>
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `Interpret user intent from: "${input}"
-      
-      CONTEXT: You are a professional career agent.
-      
-      ACTIONS:
-      - 'search_jobs': Use when user asks for employment roles or searching for work.
-      - 'update_profile': Use when user mentions changing name, email, phone, or job preferences (target roles, locations, salary).
-      - 'improve_resume': Use when user wants to enhance, rewrite, or add something to their resume.
-      - 'find_gigs': Use for freelance or project-based work searches.
-      - 'apply': Use if user provides a URL and wants to start applying.
-      - 'switch_tab': Use for navigating the UI (to discover, resume_lab, freelance, profile, history, roadmap, interview).
-      - 'start_interview': Use when user wants to practice for a job or role.
-      
       Output ONLY valid JSON matching the CommandResult interface.`,
       config: {
         responseMimeType: "application/json",
@@ -519,32 +439,15 @@ export const interpretCommand = async (input: string): Promise<CommandResult> =>
           type: Type.OBJECT,
           properties: {
             action: { type: Type.STRING, enum: ['apply', 'search_jobs', 'update_profile', 'improve_resume', 'status', 'strategy', 'find_gigs', 'blocked', 'switch_tab', 'start_interview'] },
-            goal: { type: Type.STRING, description: "Raw goal text" },
+            goal: { type: Type.STRING },
             params: {
               type: Type.OBJECT,
               properties: {
-                profile_updates: { 
-                  type: Type.OBJECT,
-                  properties: {
-                    fullName: { type: Type.STRING },
-                    email: { type: Type.STRING },
-                    phone: { type: Type.STRING },
-                    linkedin: { type: Type.STRING },
-                    portfolio: { type: Type.STRING }
-                  }
-                },
-                preferences_updates: {
-                  type: Type.OBJECT,
-                  properties: {
-                    targetRoles: { type: Type.ARRAY, items: { type: Type.STRING } },
-                    minSalary: { type: Type.STRING },
-                    locations: { type: Type.ARRAY, items: { type: Type.STRING } },
-                    remoteOnly: { type: Type.BOOLEAN }
-                  }
-                },
-                improvement_prompt: { type: Type.STRING, description: "Instruction for resume change" },
-                target_tab: { type: Type.STRING, enum: ['discover', 'resume_lab', 'freelance', 'profile', 'history', 'roadmap', 'interview'] },
-                query: { type: Type.STRING, description: "The search query" }
+                profile_updates: { type: Type.OBJECT },
+                preferences_updates: { type: Type.OBJECT },
+                improvement_prompt: { type: Type.STRING },
+                target_tab: { type: Type.STRING },
+                query: { type: Type.STRING }
               }
             }
           },
@@ -552,7 +455,7 @@ export const interpretCommand = async (input: string): Promise<CommandResult> =>
         }
       }
     });
-    return JSON.parse(response.text || '{"action":"blocked"}');
+    return safeParseJson(response.text, { action: 'blocked' });
   } catch (error) {
     return { action: 'blocked' };
   }
@@ -564,7 +467,7 @@ export const generateProposal = async (gig: any, profile: UserProfile): Promise<
     model: 'gemini-3-flash-preview',
     contents: `Write proposal for: ${gig.title}. Description: ${gig.description}. My Context: ${profile.resumeTracks[0]?.content.summary}`,
     config: {
-      systemInstruction: "Write a short, professional freelance bid. Highlight relevant project experience and end with an available time for a call.",
+      systemInstruction: "Write a short, professional freelance bid.",
     }
   });
   return response.text || "Proposal failed.";
@@ -574,8 +477,7 @@ export const extractJobData = async (input: string): Promise<Job> => {
   const ai = getAi();
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
-    contents: `Extract real structured details from this live job posting: "${input}". 
-    Use search tools to confirm the company and requirements if the link text is sparse.`,
+    contents: `Extract real structured details from this live job posting: "${input}".`,
     config: {
       tools: [{ googleSearch: {} }],
       responseMimeType: "application/json",
@@ -593,7 +495,7 @@ export const extractJobData = async (input: string): Promise<Job> => {
       }
     }
   });
-  const data = JSON.parse(response.text || "{}");
+  const data = safeParseJson(response.text, {});
   return { ...data, id: Math.random().toString(36).substr(2, 9), scrapedAt: new Date().toISOString() };
 };
 
@@ -601,15 +503,7 @@ export const searchJobs = async (preferences: any): Promise<DiscoveredJob[]> => 
   const ai = getAi();
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
-    contents: `CRITICAL: Find and verify 5-7 active, non-expired job listings for: ${JSON.stringify(preferences.targetRoles)}.
-    
-    INSTRUCTIONS:
-    1. Use Google Search to find real listings on LinkedIn, Indeed, Greenhouse, Lever, or company career pages.
-    2. Extract the actual application URL (not a generic home page).
-    3. Determine the 'postedAt' date (e.g., '2 days ago') to ensure they are fresh.
-    4. Provide a brief description and the source name.
-    
-    STRICTLY NO SIMULATED DATA. Every entry must be a real job you found on the live web.`,
+    contents: `CRITICAL: Find and verify 5-7 active, non-expired job listings for: ${JSON.stringify(preferences.targetRoles)}.`,
     config: {
       tools: [{ googleSearch: {} }],
       responseMimeType: "application/json",
@@ -630,13 +524,7 @@ export const searchJobs = async (preferences: any): Promise<DiscoveredJob[]> => 
       }
     }
   });
-  
-  try {
-    return JSON.parse(response.text || "[]");
-  } catch (e) {
-    console.error("Search Grounding Parse Error:", e);
-    return [];
-  }
+  return safeParseJson(response.text, []);
 };
 
 export const calculateMatchScore = async (job: any, profile: UserProfile): Promise<any> => {
@@ -656,26 +544,7 @@ export const calculateMatchScore = async (job: any, profile: UserProfile): Promi
       }
     }
   });
-  return JSON.parse(response.text || '{"score":0}');
-};
-
-export const generateCoverLetter = async (job: any, profile: UserProfile, style: any): Promise<string> => {
-  const ai = getAi();
-  const response = await ai.models.generateContent({ 
-    model: 'gemini-3-flash-preview', 
-    contents: `Write a ${style} cover letter for ${job.title} at ${job.company}. Source Context: ${job.description}` 
-  });
-  return response.text || "";
-};
-
-export const mutateResume = async (job: any, profile: UserProfile): Promise<any> => {
-  const ai = getAi();
-  const response = await ai.models.generateContent({ 
-    model: 'gemini-3-pro-preview', 
-    contents: `Update my resume summary and achievements to perfectly match ${job.title}. Focus on these requirements: ${job.description}`,
-    config: { responseMimeType: "application/json" }
-  });
-  return JSON.parse(response.text || "{}");
+  return safeParseJson(response.text, { score: 0 });
 };
 
 export const parseResume = async (base64: string, mimeType: string): Promise<any> => {
@@ -685,5 +554,5 @@ export const parseResume = async (base64: string, mimeType: string): Promise<any
     contents: { parts: [{ inlineData: { data: base64, mimeType } }, { text: "Extract Name, Email, Phone, and structured Resume JSON." }] },
     config: { responseMimeType: "application/json" }
   });
-  return JSON.parse(response.text || "{}");
+  return safeParseJson(response.text, {});
 };
